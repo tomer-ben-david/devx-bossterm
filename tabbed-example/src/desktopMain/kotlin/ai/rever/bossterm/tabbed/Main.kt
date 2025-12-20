@@ -129,27 +129,28 @@ private fun ApplicationScope.TabbedTerminalWindow(
         }
 
         MaterialTheme(colorScheme = darkColorScheme()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(settings.defaultBackgroundColorWithOpacity)
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = settings.defaultBackgroundColor
             ) {
-                // Main terminal
-                TabbedTerminal(
-                    onExit = onCloseRequest,
-                    onWindowTitleChange = { title -> windowTitle = title },
-                    onNewWindow = onNewWindow,
-                    onShowSettings = { showSettings = true },
-                    menuActions = menuActions,
-                    isWindowFocused = { isWindowFocused },
-                    modifier = Modifier.fillMaxSize()
-                )
-
-                // Settings panel overlay (simplified)
-                if (showSettings) {
-                    SettingsPanel(
-                        onDismiss = { showSettings = false }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Main terminal
+                    TabbedTerminal(
+                        onExit = onCloseRequest,
+                        onWindowTitleChange = { title -> windowTitle = title },
+                        onNewWindow = onNewWindow,
+                        onShowSettings = { showSettings = true },
+                        menuActions = menuActions,
+                        isWindowFocused = { isWindowFocused },
+                        modifier = Modifier.fillMaxSize()
                     )
+
+                    // Settings panel overlay (simplified)
+                    if (showSettings) {
+                        SettingsPanel(
+                            onDismiss = { showSettings = false }
+                        )
+                    }
                 }
             }
         }
