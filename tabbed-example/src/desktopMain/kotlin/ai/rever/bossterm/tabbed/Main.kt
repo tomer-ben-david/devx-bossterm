@@ -124,7 +124,11 @@ private fun ApplicationScope.TabbedTerminalWindow(
         }
 
         MaterialTheme(colorScheme = darkColorScheme()) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
                 // Main terminal
                 TabbedTerminal(
                     onExit = onCloseRequest,
