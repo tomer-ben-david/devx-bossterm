@@ -1472,17 +1472,19 @@ fun ProperTerminal(
         // Restore focus to terminal when debug window closes
         LaunchedEffect(debugPanelVisible) {
           if (!debugPanelVisible) {
-            // Window just closed - restore focus to terminal
+            // Delay for Compose window to fully close before focus restoration
             kotlinx.coroutines.delay(50)
             focusRequester.requestFocus()
           }
         }
 
-        // Restore focus to terminal when context menu closes
+        // Restore focus to terminal when context menu closes.
+        // Critical for embedded scenarios where focus returns to parent container
+        // instead of terminal after AWT JPopupMenu dismissal. Fixes #126.
         val contextMenuState by contextMenuController.menuState
         LaunchedEffect(contextMenuState.isVisible) {
           if (!contextMenuState.isVisible) {
-            // Menu just closed - restore focus to terminal
+            // Delay for AWT JPopupMenu to fully close before focus restoration
             kotlinx.coroutines.delay(50)
             focusRequester.requestFocus()
           }
