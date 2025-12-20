@@ -21,6 +21,51 @@ import ai.rever.bossterm.terminal.model.StyleState
 import ai.rever.bossterm.terminal.model.TerminalTextBuffer
 
 /**
+ * Base interface for context menu elements.
+ */
+sealed interface ContextMenuElement
+
+/**
+ * A clickable context menu item.
+ *
+ * @param id Unique identifier for the menu item
+ * @param label Display text for the menu item
+ * @param enabled Whether the item is clickable (default: true)
+ * @param action Callback invoked when the item is clicked
+ */
+data class ContextMenuItem(
+    val id: String,
+    val label: String,
+    val enabled: Boolean = true,
+    val action: () -> Unit
+) : ContextMenuElement
+
+/**
+ * A section separator in the context menu.
+ * Use this to visually group related menu items.
+ *
+ * @param id Unique identifier for the section
+ * @param label Optional label displayed above the separator (section header)
+ */
+data class ContextMenuSection(
+    val id: String,
+    val label: String? = null
+) : ContextMenuElement
+
+/**
+ * A submenu containing nested menu items.
+ *
+ * @param id Unique identifier for the submenu
+ * @param label Display text for the submenu
+ * @param items Nested menu elements (can include items, sections, or more submenus)
+ */
+data class ContextMenuSubmenu(
+    val id: String,
+    val label: String,
+    val items: List<ContextMenuElement>
+) : ContextMenuElement
+
+/**
  * Simplified Terminal composable for external integration.
  *
  * This provides a clean API for embedding a terminal in any Compose Desktop application,
@@ -77,6 +122,7 @@ import ai.rever.bossterm.terminal.model.TerminalTextBuffer
  * @param onTitleChange Callback invoked when terminal title changes (OSC 0/1/2)
  * @param onExit Callback invoked when shell process exits with exit code
  * @param onReady Callback invoked when terminal is ready (process started)
+ * @param contextMenuItems Custom context menu elements (items, sections, submenus) to add after the default items
  * @param modifier Compose modifier for the terminal container
  */
 @Composable
@@ -92,6 +138,7 @@ fun EmbeddableTerminal(
     onExit: ((Int) -> Unit)? = null,
     onReady: (() -> Unit)? = null,
     onNewWindow: (() -> Unit)? = null,
+    contextMenuItems: List<ContextMenuElement> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     // Use provided state or create auto-disposing one
@@ -153,7 +200,9 @@ fun EmbeddableTerminal(
             isActiveTab = true,
             sharedFont = terminalFont,
             onTabTitleChange = { onTitleChange?.invoke(it) },
-            onNewWindow = onNewWindow ?: {},
+            onNewWindow = onNewWindow,
+            enableDebugPanel = false,  // Hide debug panel in embedded mode
+            customContextMenuItems = contextMenuItems,
             modifier = modifier
         )
     }

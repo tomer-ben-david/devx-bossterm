@@ -114,16 +114,16 @@ fun ProperTerminal(
   isActiveTab: Boolean,
   sharedFont: FontFamily,
   onTabTitleChange: (String) -> Unit,
-  onNewTab: () -> Unit = {},
+  onNewTab: (() -> Unit)? = null,
   onNewPreConnectTab: () -> Unit = {},  // Ctrl+Shift+T: Test pre-connection input
   onCloseTab: () -> Unit = {},
   onNextTab: () -> Unit = {},
   onPreviousTab: () -> Unit = {},
   onSwitchToTab: (Int) -> Unit = {},
-  onNewWindow: () -> Unit = {},  // Cmd/Ctrl+N: New window
-  onShowSettings: () -> Unit = {},  // Open settings window
-  onSplitHorizontal: () -> Unit = {},  // Cmd+Shift+H: Split horizontally (top/bottom)
-  onSplitVertical: () -> Unit = {},  // Cmd+D: Split vertically (left/right)
+  onNewWindow: (() -> Unit)? = null,  // Cmd/Ctrl+N: New window
+  onShowSettings: (() -> Unit)? = null,  // Open settings window
+  onSplitHorizontal: (() -> Unit)? = null,  // Cmd+Shift+H: Split horizontally (top/bottom)
+  onSplitVertical: (() -> Unit)? = null,  // Cmd+D: Split vertically (left/right)
   onClosePane: () -> Unit = {},  // Cmd+Shift+W: Close current pane
   onNavigatePane: (NavigationDirection) -> Unit = {},  // Navigate between panes directionally
   onNavigateNextPane: () -> Unit = {},  // Cmd+]: Navigate to next pane (cycles)
@@ -131,6 +131,8 @@ fun ProperTerminal(
   onMoveToNewTab: (() -> Unit)? = null,  // Move current pane to new tab (context menu)
   onPaneFocus: () -> Unit = {},  // Called when pane receives mouse press (for split focus)
   menuActions: MenuActions? = null,
+  enableDebugPanel: Boolean = true,  // Whether to show debug panel option in context menu
+  customContextMenuItems: List<ai.rever.bossterm.compose.ContextMenuElement> = emptyList(),
   modifier: Modifier = Modifier
 ) {
   // Extract session state (no more remember {} blocks - state lives in TerminalSession)
@@ -423,24 +425,24 @@ fun ProperTerminal(
       isMacOS = isMacOS
     )
 
-    // Add tab management shortcuts (Phase 5)
+    // Add tab management shortcuts (Phase 5) - only if callbacks provided
     addTabManagementActions(
       registry = registry,
-      onNewTab = onNewTab,
+      onNewTab = onNewTab ?: {},
       onNewPreConnectTab = onNewPreConnectTab,
       onCloseTab = onCloseTab,
       onNextTab = onNextTab,
       onPreviousTab = onPreviousTab,
       onSwitchToTab = onSwitchToTab,
-      onNewWindow = onNewWindow,
+      onNewWindow = onNewWindow ?: {},
       isMacOS = isMacOS
     )
 
-    // Add split pane management shortcuts
+    // Add split pane management shortcuts - only if callbacks provided
     addSplitPaneActions(
       registry = registry,
-      onSplitVertical = onSplitVertical,
-      onSplitHorizontal = onSplitHorizontal,
+      onSplitVertical = onSplitVertical ?: {},
+      onSplitHorizontal = onSplitHorizontal ?: {},
       onClosePane = onClosePane,
       onMoveToNewTab = onMoveToNewTab,
       onNavigateUp = { onNavigatePane(NavigationDirection.UP) },
@@ -811,10 +813,11 @@ fun ProperTerminal(
                   onSplitVertical = onSplitVertical,
                   onSplitHorizontal = onSplitHorizontal,
                   onMoveToNewTab = onMoveToNewTab,
-                  onShowDebug = if (settings.debugModeEnabled) {
+                  onShowDebug = if (enableDebugPanel && settings.debugModeEnabled) {
                     { debugPanelVisible = !debugPanelVisible }
                   } else null,
-                  onShowSettings = onShowSettings
+                  onShowSettings = onShowSettings,
+                  customItems = customContextMenuItems
                 )
               } else {
                 showTerminalContextMenu(
@@ -846,10 +849,11 @@ fun ProperTerminal(
                   onSplitVertical = onSplitVertical,
                   onSplitHorizontal = onSplitHorizontal,
                   onMoveToNewTab = onMoveToNewTab,
-                  onShowDebug = if (settings.debugModeEnabled) {
+                  onShowDebug = if (enableDebugPanel && settings.debugModeEnabled) {
                     { debugPanelVisible = !debugPanelVisible }
                   } else null,
-                  onShowSettings = onShowSettings
+                  onShowSettings = onShowSettings,
+                  customItems = customContextMenuItems
                 )
               }
               change.consume()
@@ -920,6 +924,8 @@ fun ProperTerminal(
                   selectionEnd = null
                 }
                 isDragging = false
+                // Ensure focus is on terminal canvas after click
+                focusRequester.requestFocus()
               }
               2 -> {
                 // Double-click: Select word at cursor position
@@ -1466,7 +1472,19 @@ fun ProperTerminal(
         // Restore focus to terminal when debug window closes
         LaunchedEffect(debugPanelVisible) {
           if (!debugPanelVisible) {
-            // Window just closed - restore focus to terminal
+            // Delay for Compose window to fully close before focus restoration
+            kotlinx.coroutines.delay(50)
+            focusRequester.requestFocus()
+          }
+        }
+
+        // Restore focus to terminal when context menu closes.
+        // Critical for embedded scenarios where focus returns to parent container
+        // instead of terminal after AWT JPopupMenu dismissal. Fixes #126.
+        val contextMenuState by contextMenuController.menuState
+        LaunchedEffect(contextMenuState.isVisible) {
+          if (!contextMenuState.isVisible) {
+            // Delay for AWT JPopupMenu to fully close before focus restoration
             kotlinx.coroutines.delay(50)
             focusRequester.requestFocus()
           }

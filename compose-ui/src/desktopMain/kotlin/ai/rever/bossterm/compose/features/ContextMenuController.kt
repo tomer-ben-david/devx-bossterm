@@ -10,6 +10,8 @@ import java.awt.MouseInfo
 import java.awt.Window
 import java.awt.event.ActionListener
 import javax.swing.BorderFactory
+import javax.swing.JLabel
+import javax.swing.JMenu
 import javax.swing.JMenuItem
 import javax.swing.JPopupMenu
 import javax.swing.JSeparator
@@ -25,14 +27,38 @@ class ContextMenuController {
     private var currentPopup: JPopupMenu? = null
 
     /**
+     * Sealed class for menu elements (items, separators, submenus)
+     */
+    sealed class MenuElement {
+        abstract val id: String
+    }
+
+    /**
      * Menu item data class
      */
     data class MenuItem(
-        val id: String,
+        override val id: String,
         val label: String,
         val enabled: Boolean,
         val action: () -> Unit
-    )
+    ) : MenuElement()
+
+    /**
+     * Menu separator with optional label
+     */
+    data class MenuSeparator(
+        override val id: String,
+        val label: String? = null
+    ) : MenuElement()
+
+    /**
+     * Submenu containing nested elements
+     */
+    data class MenuSubmenu(
+        override val id: String,
+        val label: String,
+        val items: List<MenuElement>
+    ) : MenuElement()
 
     /**
      * Menu state data class
@@ -41,7 +67,7 @@ class ContextMenuController {
         val isVisible: Boolean = false,
         val x: Float = 0f,
         val y: Float = 0f,
-        val items: List<MenuItem> = emptyList()
+        val items: List<MenuElement> = emptyList()
     )
 
     private val _menuState = mutableStateOf(MenuState())
@@ -57,7 +83,7 @@ class ContextMenuController {
     /**
      * Show context menu at current mouse position using native AWT popup
      */
-    fun showMenu(x: Float, y: Float, items: List<MenuItem>, window: ComposeWindow? = null) {
+    fun showMenu(x: Float, y: Float, items: List<MenuElement>, window: ComposeWindow? = null) {
         // Get actual mouse screen position - most reliable way
         val mouseLocation = MouseInfo.getPointerInfo()?.location
         if (mouseLocation != null) {
@@ -76,7 +102,7 @@ class ContextMenuController {
     /**
      * Show native AWT popup menu at screen coordinates with dark theme styling
      */
-    private fun showNativeMenuAtScreen(screenX: Int, screenY: Int, items: List<MenuItem>) {
+    private fun showNativeMenuAtScreen(screenX: Int, screenY: Int, items: List<MenuElement>) {
         // Dismiss any existing popup first to prevent stuck menus
         currentPopup?.let {
             it.isVisible = false
@@ -88,25 +114,19 @@ class ContextMenuController {
             border = BorderFactory.createLineBorder(Color(0x3C, 0x3F, 0x41), 1)
         }
 
-        items.forEach { item ->
-            if (item.id.startsWith("separator")) {
-                popup.add(JSeparator().apply {
-                    background = Color(0x2B, 0x2B, 0x2B)
-                    foreground = Color(0x3C, 0x3F, 0x41)
-                })
-            } else {
-                val menuItem = JMenuItem(item.label).apply {
-                    isEnabled = item.enabled
-                    background = Color(0x2B, 0x2B, 0x2B)
-                    foreground = if (item.enabled) Color.WHITE else Color.GRAY
-                    font = Font(".AppleSystemUIFont", Font.PLAIN, 13)
-                    border = BorderFactory.createEmptyBorder(4, 12, 4, 12)
-                    isOpaque = true
-                    addActionListener { item.action() }
-                }
-                popup.add(menuItem)
+        // Add elements to popup
+        addElementsToMenu(popup, items)
+
+        // Add listener to track popup dismissal for focus restoration
+        popup.addPopupMenuListener(object : javax.swing.event.PopupMenuListener {
+            override fun popupMenuWillBecomeVisible(e: javax.swing.event.PopupMenuEvent?) {}
+            override fun popupMenuWillBecomeInvisible(e: javax.swing.event.PopupMenuEvent?) {
+                // Update state when popup is dismissed (by any means)
+                _menuState.value = MenuState()
+                currentPopup = null
             }
-        }
+            override fun popupMenuCanceled(e: javax.swing.event.PopupMenuEvent?) {}
+        })
 
         // Store reference for future dismissal
         currentPopup = popup
@@ -153,10 +173,72 @@ class ContextMenuController {
     }
 
     /**
+     * Add menu elements to a popup menu or submenu
+     */
+    private fun addElementsToMenu(menu: javax.swing.JComponent, elements: List<MenuElement>) {
+        elements.forEach { element ->
+            when (element) {
+                is MenuItem -> {
+                    if (element.id.startsWith("separator")) {
+                        menu.add(JSeparator().apply {
+                            background = Color(0x2B, 0x2B, 0x2B)
+                            foreground = Color(0x3C, 0x3F, 0x41)
+                        })
+                    } else {
+                        val menuItem = JMenuItem(element.label).apply {
+                            isEnabled = element.enabled
+                            background = Color(0x2B, 0x2B, 0x2B)
+                            foreground = if (element.enabled) Color.WHITE else Color.GRAY
+                            font = Font(".AppleSystemUIFont", Font.PLAIN, 13)
+                            border = BorderFactory.createEmptyBorder(4, 12, 4, 12)
+                            isOpaque = true
+                            addActionListener { element.action() }
+                        }
+                        menu.add(menuItem)
+                    }
+                }
+                is MenuSeparator -> {
+                    if (element.label != null) {
+                        // Section with label
+                        menu.add(JSeparator().apply {
+                            background = Color(0x2B, 0x2B, 0x2B)
+                            foreground = Color(0x3C, 0x3F, 0x41)
+                        })
+                        menu.add(JLabel(element.label).apply {
+                            foreground = Color.GRAY
+                            font = Font(".AppleSystemUIFont", Font.PLAIN, 11)
+                            border = BorderFactory.createEmptyBorder(2, 12, 2, 12)
+                        })
+                    } else {
+                        // Plain separator
+                        menu.add(JSeparator().apply {
+                            background = Color(0x2B, 0x2B, 0x2B)
+                            foreground = Color(0x3C, 0x3F, 0x41)
+                        })
+                    }
+                }
+                is MenuSubmenu -> {
+                    val submenu = JMenu(element.label).apply {
+                        background = Color(0x2B, 0x2B, 0x2B)
+                        foreground = Color.WHITE
+                        font = Font(".AppleSystemUIFont", Font.PLAIN, 13)
+                        border = BorderFactory.createEmptyBorder(4, 12, 4, 12)
+                        isOpaque = true
+                        popupMenu.background = Color(0x2B, 0x2B, 0x2B)
+                        popupMenu.border = BorderFactory.createLineBorder(Color(0x3C, 0x3F, 0x41), 1)
+                    }
+                    addElementsToMenu(submenu, element.items)
+                    menu.add(submenu)
+                }
+            }
+        }
+    }
+
+    /**
      * Execute menu item by ID (if enabled)
      */
     fun executeItem(id: String) {
-        val item = _menuState.value.items.find { it.id == id }
+        val item = _menuState.value.items.filterIsInstance<MenuItem>().find { it.id == id }
         if (item != null && item.enabled) {
             item.action()
             hideMenu()
@@ -180,8 +262,9 @@ fun createTerminalContextMenuItems(
     onSplitHorizontal: (() -> Unit)? = null,
     onMoveToNewTab: (() -> Unit)? = null,
     onShowDebug: (() -> Unit)? = null,
-    onShowSettings: (() -> Unit)? = null
-): List<ContextMenuController.MenuItem> {
+    onShowSettings: (() -> Unit)? = null,
+    customItems: List<ai.rever.bossterm.compose.ContextMenuElement> = emptyList()
+): List<ContextMenuController.MenuElement> {
     val baseItems = listOf(
         ContextMenuController.MenuItem(
             id = "copy",
@@ -326,7 +409,46 @@ fun createTerminalContextMenuItems(
         )
     }
 
-    return baseItems + splitItems + tabItems + extraItems
+    // Add custom items with separator if any exist
+    // Skip automatic separator if first custom item is already a section
+    val customMenuItems = if (customItems.isNotEmpty()) {
+        val needsSeparator = customItems.first() !is ai.rever.bossterm.compose.ContextMenuSection
+        val separator = if (needsSeparator) {
+            listOf<ContextMenuController.MenuElement>(
+                ContextMenuController.MenuSeparator(id = "separator_custom")
+            )
+        } else {
+            emptyList()
+        }
+        separator + customItems.map { element -> convertToMenuElement(element) }
+    } else {
+        emptyList()
+    }
+
+    return baseItems + splitItems + tabItems + extraItems + customMenuItems
+}
+
+/**
+ * Convert ContextMenuElement to ContextMenuController.MenuElement
+ */
+private fun convertToMenuElement(element: ai.rever.bossterm.compose.ContextMenuElement): ContextMenuController.MenuElement {
+    return when (element) {
+        is ai.rever.bossterm.compose.ContextMenuItem -> ContextMenuController.MenuItem(
+            id = "custom_${element.id}",
+            label = element.label,
+            enabled = element.enabled,
+            action = element.action
+        )
+        is ai.rever.bossterm.compose.ContextMenuSection -> ContextMenuController.MenuSeparator(
+            id = "custom_section_${element.id}",
+            label = element.label
+        )
+        is ai.rever.bossterm.compose.ContextMenuSubmenu -> ContextMenuController.MenuSubmenu(
+            id = "custom_submenu_${element.id}",
+            label = element.label,
+            items = element.items.map { convertToMenuElement(it) }
+        )
+    }
 }
 
 /**
@@ -349,6 +471,7 @@ fun showTerminalContextMenu(
     onMoveToNewTab: (() -> Unit)? = null,
     onShowDebug: (() -> Unit)? = null,
     onShowSettings: (() -> Unit)? = null,
+    customItems: List<ai.rever.bossterm.compose.ContextMenuElement> = emptyList(),
     window: ComposeWindow? = null
 ) {
     val items = createTerminalContextMenuItems(
@@ -364,7 +487,8 @@ fun showTerminalContextMenu(
         onSplitHorizontal = onSplitHorizontal,
         onMoveToNewTab = onMoveToNewTab,
         onShowDebug = onShowDebug,
-        onShowSettings = onShowSettings
+        onShowSettings = onShowSettings,
+        customItems = customItems
     )
     controller.showMenu(x, y, items, window)
 }
@@ -435,6 +559,7 @@ fun showHyperlinkContextMenu(
     onMoveToNewTab: (() -> Unit)? = null,
     onShowDebug: (() -> Unit)? = null,
     onShowSettings: (() -> Unit)? = null,
+    customItems: List<ai.rever.bossterm.compose.ContextMenuElement> = emptyList(),
     window: ComposeWindow? = null
 ) {
     val hyperlinkItems = createHyperlinkContextMenuItems(
@@ -455,7 +580,8 @@ fun showHyperlinkContextMenu(
         onSplitHorizontal = onSplitHorizontal,
         onMoveToNewTab = onMoveToNewTab,
         onShowDebug = onShowDebug,
-        onShowSettings = onShowSettings
+        onShowSettings = onShowSettings,
+        customItems = customItems
     )
     controller.showMenu(x, y, hyperlinkItems + terminalItems, window)
 }
