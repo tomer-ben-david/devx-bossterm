@@ -410,10 +410,17 @@ fun createTerminalContextMenuItems(
     }
 
     // Add custom items with separator if any exist
+    // Skip automatic separator if first custom item is already a section
     val customMenuItems = if (customItems.isNotEmpty()) {
-        listOf<ContextMenuController.MenuElement>(
-            ContextMenuController.MenuSeparator(id = "separator_custom")
-        ) + customItems.map { element -> convertToMenuElement(element) }
+        val needsSeparator = customItems.first() !is ai.rever.bossterm.compose.ContextMenuSection
+        val separator = if (needsSeparator) {
+            listOf<ContextMenuController.MenuElement>(
+                ContextMenuController.MenuSeparator(id = "separator_custom")
+            )
+        } else {
+            emptyList()
+        }
+        separator + customItems.map { element -> convertToMenuElement(element) }
     } else {
         emptyList()
     }
