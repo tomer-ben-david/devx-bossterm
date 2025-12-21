@@ -262,6 +262,8 @@ When embedding BossTerm in a larger application, focus is automatically managed:
 - **Parent UI clicks**: Click in terminal area to restore focus
 - **Keyboard shortcuts**: Terminal captures keyboard when focused
 
+> **Important**: Parent containers must NOT compete for focus with the terminal. Avoid using `.focusable()` or `.clickable { requestFocus() }` on containers that wrap `EmbeddableTerminal`. See the [Troubleshooting Guide](troubleshooting.md#focus-management-issues) for detailed examples and solutions.
+
 ## Settings
 
 You can customize terminal appearance and behavior:
