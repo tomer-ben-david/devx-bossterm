@@ -288,6 +288,7 @@ fun MyApp() {
 
 - [Embedding Guide](docs/embedding.md) - Embed a single terminal with custom context menus
 - [Tabbed Terminal Guide](docs/tabbed-terminal.md) - Full-featured tabbed terminal with splits
+- [Troubleshooting Guide](docs/troubleshooting.md) - Common issues and solutions
 
 ## Contributing
 
