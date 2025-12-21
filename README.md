@@ -22,6 +22,42 @@ brew install --cask bossterm
 
 Download the latest DMG from [GitHub Releases](https://github.com/kshivang/BossTerm/releases) and drag BossTerm to Applications.
 
+### Linux (Debian/Ubuntu)
+
+```bash
+# Download the .deb package from GitHub Releases
+sudo dpkg -i bossterm_*_amd64.deb
+sudo apt-get install -f  # Install dependencies if needed
+```
+
+### Linux (Fedora/RHEL)
+
+```bash
+# Download the .rpm package from GitHub Releases
+sudo dnf install bossterm-*.x86_64.rpm
+```
+
+### Linux (Snap)
+
+```bash
+sudo snap install bossterm --classic
+```
+
+Or download the `.snap` file from [GitHub Releases](https://github.com/kshivang/BossTerm/releases) and install manually:
+
+```bash
+sudo snap install bossterm_*.snap --classic --dangerous
+```
+
+### JAR (Cross-platform)
+
+Requires Java 17+:
+
+```bash
+# Download bossterm-*.jar from GitHub Releases
+java -jar bossterm-*.jar
+```
+
 ### Build from Source
 
 ```bash
