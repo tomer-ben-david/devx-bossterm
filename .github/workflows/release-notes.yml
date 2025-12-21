@@ -65,7 +65,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_args: "--allowedTools 'Bash(git:*)' 'Read' 'Write' 'Edit' 'Glob'"
+          claude_args: "--allowedTools 'Bash(git:*)' 'Bash(gh:*)' 'Read' 'Write' 'Edit' 'Glob'"
           prompt: |
             You need to generate release notes for BossTerm ${{ steps.release_info.outputs.tag }} and commit them.
 
@@ -103,9 +103,12 @@ jobs:
 
             3. Read docs/release-notes/README.md and add a link to this new release at the top of the releases list
 
-            4. IMPORTANT: After creating the files, run these git commands:
+            4. After creating the files, run these git commands:
                git add docs/release-notes/
                git commit -m "docs: Add release notes for ${{ steps.release_info.outputs.tag }}"
                git push
 
-            Git is already configured. Just run the commands.
+            5. Update the GitHub release with the same notes using:
+               gh release edit ${{ steps.release_info.outputs.tag }} --notes-file docs/release-notes/${{ steps.release_info.outputs.tag }}.md
+
+            Git and gh are already configured. Just run the commands.
