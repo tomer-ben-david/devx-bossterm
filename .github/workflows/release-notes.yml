@@ -12,8 +12,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
-  id-token: write
 
 jobs:
   generate-release-notes:
@@ -23,7 +21,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get release info
         id: release_info
@@ -41,8 +38,13 @@ jobs:
           PREV_TAG=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || echo "")
           echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
 
+          # Get release date
+          RELEASE_DATE=$(git log -1 --format=%cs "$TAG" 2>/dev/null || date +%Y-%m-%d)
+          echo "release_date=$RELEASE_DATE" >> $GITHUB_OUTPUT
+
           echo "Current tag: $TAG"
           echo "Previous tag: $PREV_TAG"
+          echo "Release date: $RELEASE_DATE"
 
       - name: Get commits since last release
         id: commits
@@ -51,136 +53,121 @@ jobs:
           PREV_TAG="${{ steps.release_info.outputs.prev_tag }}"
 
           if [[ -n "$PREV_TAG" ]]; then
-            COMMITS=$(git log "$PREV_TAG..$TAG" --pretty=format:"- %s (%h)" --no-merges)
-            COMMIT_RANGE="$PREV_TAG..$TAG"
+            git log "$PREV_TAG..$TAG" --pretty=format:"- %s" --no-merges > /tmp/commits.txt
           else
-            COMMITS=$(git log "$TAG" --pretty=format:"- %s (%h)" --no-merges -20)
-            COMMIT_RANGE="(first 20 commits)"
+            git log "$TAG" --pretty=format:"- %s" --no-merges -20 > /tmp/commits.txt
           fi
 
-          # Save to file to avoid escaping issues
-          echo "$COMMITS" > /tmp/commits.txt
-          echo "commit_range=$COMMIT_RANGE" >> $GITHUB_OUTPUT
+          # Escape for JSON
+          COMMITS=$(cat /tmp/commits.txt | jq -Rs .)
+          echo "commits=$COMMITS" >> $GITHUB_OUTPUT
 
-      - name: Get changed files
-        id: changed_files
+      - name: Generate release notes with Claude API
+        id: generate
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           TAG="${{ steps.release_info.outputs.tag }}"
+          VERSION="${{ steps.release_info.outputs.version }}"
           PREV_TAG="${{ steps.release_info.outputs.prev_tag }}"
+          RELEASE_DATE="${{ steps.release_info.outputs.release_date }}"
+          COMMITS=$(cat /tmp/commits.txt)
 
-          if [[ -n "$PREV_TAG" ]]; then
-            git diff --stat "$PREV_TAG..$TAG" > /tmp/changed_files.txt
-          else
-            git diff --stat HEAD~20..HEAD > /tmp/changed_files.txt
+          # Create prompt
+          PROMPT="Generate concise release notes for BossTerm ${TAG}.
+
+          Release date: ${RELEASE_DATE}
+          Previous version: ${PREV_TAG}
+
+          Commits:
+          ${COMMITS}
+
+          Output ONLY the markdown content (no code blocks), using this exact format:
+
+          # Release Notes - ${TAG}
+
+          **Release Date:** ${RELEASE_DATE}
+
+          ## Highlights
+          Brief 1-2 sentence summary of the most important changes.
+
+          ## New Features
+          - Feature: Description (only if there are new features, otherwise omit section)
+
+          ## Bug Fixes
+          - Fix: Description (only if there are bug fixes, otherwise omit section)
+
+          ## Improvements
+          - Improvement: Description (only if there are improvements, otherwise omit section)
+
+          ## Breaking Changes
+          None (or list them if any)
+
+          ## Full Changelog
+          https://github.com/kshivang/BossTerm/compare/${PREV_TAG}...${TAG}"
+
+          # Call Claude API
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -d "$(jq -n \
+              --arg prompt "$PROMPT" \
+              '{
+                model: "claude-sonnet-4-20250514",
+                max_tokens: 2000,
+                messages: [{role: "user", content: $prompt}]
+              }')")
+
+          # Extract content
+          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
+
+          if [[ -z "$CONTENT" ]]; then
+            echo "Error: Failed to generate release notes"
+            echo "$RESPONSE"
+            exit 1
           fi
 
-      - name: Create docs/release-notes directory
-        run: mkdir -p docs/release-notes
+          # Save to file
+          mkdir -p docs/release-notes
+          echo "$CONTENT" > "docs/release-notes/${TAG}.md"
 
-      - name: Run Claude Code to generate release notes
-        id: claude
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
-            You are generating release notes for BossTerm v${{ steps.release_info.outputs.version }}.
+          echo "Generated release notes for ${TAG}"
 
-            ## Context
-            - Tag: ${{ steps.release_info.outputs.tag }}
-            - Previous tag: ${{ steps.release_info.outputs.prev_tag }}
-            - Commit range: ${{ steps.commits.outputs.commit_range }}
+      - name: Update release notes index
+        run: |
+          TAG="${{ steps.release_info.outputs.tag }}"
+          RELEASE_DATE="${{ steps.release_info.outputs.release_date }}"
 
-            ## Commits in this release:
-            $(cat /tmp/commits.txt)
+          # Create or update README
+          INDEX_FILE="docs/release-notes/README.md"
 
-            ## Changed files summary:
-            $(cat /tmp/changed_files.txt)
+          if [[ ! -f "$INDEX_FILE" ]]; then
+            echo "# BossTerm Release Notes" > "$INDEX_FILE"
+            echo "" >> "$INDEX_FILE"
+            echo "## Releases" >> "$INDEX_FILE"
+            echo "" >> "$INDEX_FILE"
+          fi
 
-            ## Your Tasks:
+          # Check if this version already exists
+          if ! grep -q "\[${TAG}\]" "$INDEX_FILE"; then
+            # Add new release after "## Releases" line
+            sed -i "/^## Releases/a\\
+          - [${TAG}](${TAG}.md) - ${RELEASE_DATE}" "$INDEX_FILE"
+          fi
 
-            1. **Create Release Notes File**
-               Create `docs/release-notes/v${{ steps.release_info.outputs.version }}.md` with:
-               - Summary of major changes (user-facing)
-               - New features (with brief descriptions)
-               - Bug fixes
-               - Breaking changes (if any)
-               - Technical improvements
-               - Contributors (if identifiable from commits)
-
-               Use this format:
-               ```markdown
-               # Release Notes - v${{ steps.release_info.outputs.version }}
-
-               **Release Date:** $(date +%Y-%m-%d)
-
-               ## Highlights
-               [Brief summary of the most important changes]
-
-               ## New Features
-               - Feature 1: Description
-
-               ## Bug Fixes
-               - Fix 1: Description
-
-               ## Improvements
-               - Improvement 1: Description
-
-               ## Breaking Changes
-               [List any breaking changes, or "None" if there are none]
-
-               ## Full Changelog
-               [Link to compare: https://github.com/kshivang/BossTerm/compare/${{ steps.release_info.outputs.prev_tag }}...${{ steps.release_info.outputs.tag }}]
-               ```
-
-            2. **Update docs/release-notes/README.md** (create if doesn't exist)
-               Add a link to the new release notes file at the top of the list.
-               Format:
-               ```markdown
-               # BossTerm Release Notes
-
-               - [v${{ steps.release_info.outputs.version }}](v${{ steps.release_info.outputs.version }}.md) - $(date +%Y-%m-%d)
-               [previous entries...]
-               ```
-
-            3. **Review and Update CLAUDE.md if needed**
-               - Check the "Last Updated" section
-               - Add any significant new features to the "Major Features" section
-               - Update "Completed (Recent)" section if there are notable completions
-               - Only make changes if there are significant updates worth documenting
-
-            4. **Review README.md**
-               - Only update if there are new user-facing features that should be highlighted
-               - Don't update for minor fixes or internal changes
-
-            Be concise and focus on user-facing changes. Don't include internal refactoring details unless they affect users.
-
-            After creating/updating files, commit the changes with message:
-            "docs: Add release notes for v${{ steps.release_info.outputs.version }}"
-
-          allowed_tools: |
-            Read
-            Write
-            Edit
-            Glob
-            Grep
-            Bash(git add:*)
-            Bash(git commit:*)
-            Bash(git status)
-            Bash(cat:*)
-            Bash(ls:*)
-            Bash(date)
-
-      - name: Push changes
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Check if there are changes to push
-          if [[ -n $(git status --porcelain) ]]; then
-            git add docs/release-notes/ README.md CLAUDE.md
-            git commit -m "docs: Add release notes for ${{ steps.release_info.outputs.tag }}" || true
+          TAG="${{ steps.release_info.outputs.tag }}"
+
+          if [[ -n $(git status --porcelain docs/release-notes/) ]]; then
+            git add docs/release-notes/
+            git commit -m "docs: Add release notes for ${TAG}"
             git push
-            echo "Release notes pushed successfully"
+            echo "✅ Release notes pushed for ${TAG}"
           else
             echo "No changes to push"
           fi
