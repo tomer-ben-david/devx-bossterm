@@ -39,6 +39,108 @@ object UnicodeConstants {
     /** Low surrogate range for Regional Indicators */
     val REGIONAL_INDICATOR_LOW_SURROGATE_RANGE = 0xDDE6..0xDDFF
 
+    // === Emoji Blocks (Supplementary Plane) ===
+    /** Enclosed Alphanumeric Supplement - includes regional indicators */
+    val ENCLOSED_ALPHANUMERIC_SUPPLEMENT_RANGE = 0x1F100..0x1F1FF
+    /** Misc Symbols and Pictographs - weather, food, animals, objects */
+    val MISC_SYMBOLS_PICTOGRAPHS_RANGE = 0x1F300..0x1F5FF
+    /** Emoticons - smileys & people */
+    val EMOTICONS_RANGE = 0x1F600..0x1F64F
+    /** Transport and Map Symbols */
+    val TRANSPORT_MAP_SYMBOLS_RANGE = 0x1F680..0x1F6FF
+    /** Supplemental Symbols and Pictographs */
+    val SUPPLEMENTAL_SYMBOLS_RANGE = 0x1F900..0x1F9FF
+    /** Symbols and Pictographs Extended-A */
+    val SYMBOLS_PICTOGRAPHS_EXTENDED_A_RANGE = 0x1FA70..0x1FAFF
+    /** Chess Symbols */
+    val CHESS_SYMBOLS_RANGE = 0x1FA00..0x1FA6F
+
+    // === BMP Emoji (unambiguous emoji, not text symbols) ===
+    /** Watch (U+231A) */
+    const val WATCH = 0x231A
+    /** Hourglass (U+231B) */
+    const val HOURGLASS = 0x231B
+    /** Umbrella with rain (U+2614) */
+    const val UMBRELLA_RAIN = 0x2614
+    /** Hot beverage (U+2615) */
+    const val HOT_BEVERAGE = 0x2615
+    /** Zodiac signs range */
+    val ZODIAC_RANGE = 0x2648..0x2653
+    /** Wheelchair (U+267F) */
+    const val WHEELCHAIR = 0x267F
+    /** Anchor (U+2693) */
+    const val ANCHOR = 0x2693
+    /** High voltage (U+26A1) */
+    const val HIGH_VOLTAGE = 0x26A1
+    /** White circle (U+26AA) */
+    const val WHITE_CIRCLE = 0x26AA
+    /** Black circle (U+26AB) */
+    const val BLACK_CIRCLE = 0x26AB
+    /** Soccer ball (U+26BD) */
+    const val SOCCER_BALL = 0x26BD
+    /** Baseball (U+26BE) */
+    const val BASEBALL = 0x26BE
+    /** Snowman (U+26C4) */
+    const val SNOWMAN = 0x26C4
+    /** Sun behind cloud (U+26C5) */
+    const val SUN_CLOUD = 0x26C5
+    /** Ophiuchus (U+26CE) */
+    const val OPHIUCHUS = 0x26CE
+    /** No entry (U+26D4) */
+    const val NO_ENTRY = 0x26D4
+    /** Church (U+26EA) */
+    const val CHURCH = 0x26EA
+    /** Fountain (U+26F2) */
+    const val FOUNTAIN = 0x26F2
+    /** Golf (U+26F3) */
+    const val GOLF = 0x26F3
+    /** Sailboat (U+26F5) */
+    const val SAILBOAT = 0x26F5
+    /** Tent (U+26FA) */
+    const val TENT = 0x26FA
+    /** Fuel pump (U+26FD) */
+    const val FUEL_PUMP = 0x26FD
+    /** Check mark button (U+2705) */
+    const val CHECK_MARK_BUTTON = 0x2705
+    /** Sparkles (U+2728) */
+    const val SPARKLES = 0x2728
+    /** Cross mark (U+274C) */
+    const val CROSS_MARK = 0x274C
+    /** Cross mark button (U+274E) */
+    const val CROSS_MARK_BUTTON = 0x274E
+    /** Question/exclamation marks range */
+    val QUESTION_EXCLAMATION_RANGE = 0x2753..0x2755
+    /** Exclamation mark (U+2757) */
+    const val EXCLAMATION_MARK = 0x2757
+    /** Math operators emoji range (➕➖➗) */
+    val MATH_OPERATORS_EMOJI_RANGE = 0x2795..0x2797
+    /** Curly loop (U+27B0) */
+    const val CURLY_LOOP = 0x27B0
+    /** Double curly loop (U+27BF) */
+    const val DOUBLE_CURLY_LOOP = 0x27BF
+    /** Curved arrow up (U+2934) */
+    const val CURVED_ARROW_UP = 0x2934
+    /** Curved arrow down (U+2935) */
+    const val CURVED_ARROW_DOWN = 0x2935
+    /** Directional arrows range (⬅⬆⬇) */
+    val DIRECTIONAL_ARROWS_RANGE = 0x2B05..0x2B07
+    /** Black large square (U+2B1B) */
+    const val BLACK_LARGE_SQUARE = 0x2B1B
+    /** White large square (U+2B1C) */
+    const val WHITE_LARGE_SQUARE = 0x2B1C
+    /** Star (U+2B50) */
+    const val STAR = 0x2B50
+    /** Heavy large circle (U+2B55) */
+    const val HEAVY_CIRCLE = 0x2B55
+    /** Wavy dash (U+3030) */
+    const val WAVY_DASH = 0x3030
+    /** Part alternation mark (U+303D) */
+    const val PART_ALTERNATION = 0x303D
+    /** Circled Ideograph Congratulation (U+3297) */
+    const val CIRCLED_CONGRATULATION = 0x3297
+    /** Circled Ideograph Secret (U+3299) */
+    const val CIRCLED_SECRET = 0x3299
+
     // === Combining Characters ===
     /** Combining Diacritical Marks (U+0300 to U+036F) - e.g., accents, umlauts */
     val COMBINING_DIACRITICS_RANGE = 0x0300..0x036F
@@ -85,4 +187,40 @@ object UnicodeConstants {
         codePoint in COMBINING_MARKS_FOR_SYMBOLS_RANGE ||
         codePoint in HEBREW_COMBINING_MARKS_RANGE ||
         codePoint in ARABIC_COMBINING_MARKS_RANGE
+
+    /** Check if code point is in supplementary plane emoji blocks (always 2-cell) */
+    fun isSupplementaryPlaneEmoji(codePoint: Int): Boolean =
+        codePoint in ENCLOSED_ALPHANUMERIC_SUPPLEMENT_RANGE ||
+        codePoint in MISC_SYMBOLS_PICTOGRAPHS_RANGE ||
+        codePoint in EMOTICONS_RANGE ||
+        codePoint in TRANSPORT_MAP_SYMBOLS_RANGE ||
+        codePoint in SUPPLEMENTAL_SYMBOLS_RANGE ||
+        codePoint in SYMBOLS_PICTOGRAPHS_EXTENDED_A_RANGE ||
+        codePoint in CHESS_SYMBOLS_RANGE
+
+    /** Check if code point is a BMP emoji (unambiguous, not text symbols) */
+    fun isBmpEmoji(codePoint: Int): Boolean = when (codePoint) {
+        WATCH, HOURGLASS -> true
+        UMBRELLA_RAIN, HOT_BEVERAGE -> true
+        in ZODIAC_RANGE -> true
+        WHEELCHAIR, ANCHOR, HIGH_VOLTAGE -> true
+        WHITE_CIRCLE, BLACK_CIRCLE -> true
+        SOCCER_BALL, BASEBALL -> true
+        SNOWMAN, SUN_CLOUD -> true
+        OPHIUCHUS, NO_ENTRY, CHURCH -> true
+        FOUNTAIN, GOLF, SAILBOAT, TENT, FUEL_PUMP -> true
+        CHECK_MARK_BUTTON, SPARKLES -> true
+        CROSS_MARK, CROSS_MARK_BUTTON -> true
+        in QUESTION_EXCLAMATION_RANGE -> true
+        EXCLAMATION_MARK -> true
+        in MATH_OPERATORS_EMOJI_RANGE -> true
+        CURLY_LOOP, DOUBLE_CURLY_LOOP -> true
+        CURVED_ARROW_UP, CURVED_ARROW_DOWN -> true
+        in DIRECTIONAL_ARROWS_RANGE -> true
+        BLACK_LARGE_SQUARE, WHITE_LARGE_SQUARE -> true
+        STAR, HEAVY_CIRCLE -> true
+        WAVY_DASH, PART_ALTERNATION -> true
+        CIRCLED_CONGRATULATION, CIRCLED_SECRET -> true
+        else -> false
+    }
 }

@@ -35,20 +35,8 @@ data class GraphemeCluster(
     val isEmoji: Boolean
         get() {
             if (codePoints.isEmpty()) return false
-            val first = codePoints[0]
-            return when {
-                // Emoji & Pictographs (U+1F300-U+1F9FF)
-                first in 0x1F300..0x1F9FF -> true
-                // Emoticons (U+1F600-U+1F64F)
-                first in 0x1F600..0x1F64F -> true
-                // Transport & Map Symbols (U+1F680-U+1F6FF)
-                first in 0x1F680..0x1F6FF -> true
-                // Supplemental Symbols (U+1F900-U+1F9FF)
-                first in 0x1F900..0x1F9FF -> true
-                // Misc Symbols with emoji presentation
-                hasVariationSelector(UnicodeConstants.VARIATION_SELECTOR_EMOJI) -> true
-                else -> false
-            }
+            return GraphemeUtils.isEmojiPresentation(codePoints[0]) ||
+                   hasVariationSelector(UnicodeConstants.VARIATION_SELECTOR_EMOJI)
         }
 
     /**

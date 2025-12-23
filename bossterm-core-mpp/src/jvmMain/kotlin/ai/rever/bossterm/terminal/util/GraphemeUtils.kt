@@ -231,66 +231,8 @@ object GraphemeUtils {
      * @return True if this character should render as 2 cells by default
      */
     fun isEmojiPresentation(codePoint: Int): Boolean {
-        return when {
-            // === SUPPLEMENTARY PLANE EMOJI (always 2-cell) ===
-            // Enclosed Alphanumeric Supplement (U+1F100-U+1F1FF) - includes regional indicators
-            codePoint in 0x1F100..0x1F1FF -> true
-            // Misc Symbols and Pictographs (U+1F300-U+1F5FF) - weather, food, animals, objects
-            codePoint in 0x1F300..0x1F5FF -> true
-            // Emoticons (U+1F600-U+1F64F) - smileys & people
-            codePoint in 0x1F600..0x1F64F -> true
-            // Transport and Map Symbols (U+1F680-U+1F6FF)
-            codePoint in 0x1F680..0x1F6FF -> true
-            // Supplemental Symbols and Pictographs (U+1F900-U+1F9FF)
-            codePoint in 0x1F900..0x1F9FF -> true
-            // Symbols and Pictographs Extended-A (U+1FA70-U+1FAFF)
-            codePoint in 0x1FA70..0x1FAFF -> true
-            // Chess Symbols (U+1FA00-U+1FA6F)
-            codePoint in 0x1FA00..0x1FA6F -> true
-
-            // === BMP EMOJI that are unambiguously emoji (not used as text symbols) ===
-            // Watch and hourglass - commonly rendered as emoji
-            codePoint == 0x231A || codePoint == 0x231B -> true
-            // Miscellaneous Symbols - only include clearly emoji ones
-            codePoint == 0x2614 || codePoint == 0x2615 -> true // ☔☕ Umbrella, coffee
-            codePoint in 0x2648..0x2653 -> true // Zodiac signs
-            codePoint == 0x267F -> true // ♿ Wheelchair
-            codePoint == 0x2693 -> true // ⚓ Anchor
-            codePoint == 0x26A1 -> true // ⚡ High voltage
-            codePoint == 0x26AA || codePoint == 0x26AB -> true // ⚪⚫ Circles
-            codePoint == 0x26BD || codePoint == 0x26BE -> true // ⚽⚾ Sports balls
-            codePoint == 0x26C4 || codePoint == 0x26C5 -> true // ⛄⛅ Snowman, sun/cloud
-            codePoint == 0x26CE -> true // ⛎ Ophiuchus
-            codePoint == 0x26D4 -> true // ⛔ No entry
-            codePoint == 0x26EA -> true // ⛪ Church
-            codePoint == 0x26F2 || codePoint == 0x26F3 -> true // ⛲⛳ Fountain, golf
-            codePoint == 0x26F5 -> true // ⛵ Sailboat
-            codePoint == 0x26FA -> true // ⛺ Tent
-            codePoint == 0x26FD -> true // ⛽ Fuel pump
-            // Dingbats - only clearly emoji ones
-            codePoint == 0x2705 -> true // ✅ Check mark button
-            codePoint == 0x2728 -> true // ✨ Sparkles
-            codePoint == 0x274C -> true // ❌ Cross mark
-            codePoint == 0x274E -> true // ❎ Cross mark button
-            codePoint in 0x2753..0x2755 -> true // ❓❔❕ Question/exclamation marks
-            codePoint == 0x2757 -> true // ❗ Exclamation mark
-            codePoint in 0x2795..0x2797 -> true // ➕➖➗ Math operators
-            codePoint == 0x27B0 -> true // ➰ Curly loop
-            codePoint == 0x27BF -> true // ➿ Double curly loop
-            // Arrows - only the clearly emoji ones
-            codePoint == 0x2934 || codePoint == 0x2935 -> true // ⤴⤵ Curved arrows
-            codePoint in 0x2B05..0x2B07 -> true // ⬅⬆⬇ Directional arrows
-            codePoint == 0x2B1B || codePoint == 0x2B1C -> true // ⬛⬜ Large squares
-            codePoint == 0x2B50 -> true // ⭐ Star
-            codePoint == 0x2B55 -> true // ⭕ Heavy large circle
-            // Japanese symbols
-            codePoint == 0x3030 -> true // 〰 Wavy dash
-            codePoint == 0x303D -> true // 〽 Part alternation mark
-            codePoint == 0x3297 -> true // ㊗ Circled Ideograph Congratulation
-            codePoint == 0x3299 -> true // ㊙ Circled Ideograph Secret
-
-            else -> false
-        }
+        return UnicodeConstants.isSupplementaryPlaneEmoji(codePoint) ||
+               UnicodeConstants.isBmpEmoji(codePoint)
     }
 
     /**

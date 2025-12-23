@@ -152,7 +152,7 @@ fun analyzeCharacter(
         (hasVariationSelectorAtCol1 && charAtCol2 == CharUtils.DWC) ||
         wcwidthResult
 
-    val isBaseDoubleWidth = if (actualCodePoint >= 0x1F100) true else isWcwidthDoubleWidth
+    val isBaseDoubleWidth = if (actualCodePoint >= UnicodeConstants.ENCLOSED_ALPHANUMERIC_SUPPLEMENT_RANGE.first) true else isWcwidthDoubleWidth
 
     // Check for variation selector - handle both DWC and non-DWC cases
     val nextCharOffset = if (isWcwidthDoubleWidth) 2 else 1
