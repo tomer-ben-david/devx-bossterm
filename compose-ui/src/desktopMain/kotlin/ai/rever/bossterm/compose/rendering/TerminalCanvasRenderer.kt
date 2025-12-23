@@ -87,6 +87,115 @@ data class RenderingContext(
 )
 
 /**
+ * Result of analyzing a character for rendering purposes.
+ * Encapsulates surrogate pair handling, double-width detection, and variation selector info.
+ */
+data class CharacterAnalysis(
+    val actualCodePoint: Int,
+    val lowSurrogate: Char?,
+    val charTextToRender: String,
+    val isWcwidthDoubleWidth: Boolean,
+    val isBaseDoubleWidth: Boolean,
+    val hasVariationSelector: Boolean,
+    val isEmojiWithVariationSelector: Boolean,
+    val isDoubleWidth: Boolean,
+    val visualWidth: Int,
+    // Character classification for font selection
+    val isCursiveOrMath: Boolean,
+    val isTechnicalSymbol: Boolean,
+    val isEmojiOrWideSymbol: Boolean
+)
+
+/**
+ * Analyze a character at the given column position for rendering.
+ * Handles surrogate pairs, double-width detection, and variation selectors.
+ * This is shared between renderBackgrounds() and renderText() to avoid duplication.
+ */
+fun analyzeCharacter(
+    char: Char,
+    line: TerminalLine,
+    col: Int,
+    width: Int,
+    ambiguousCharsAreDoubleWidth: Boolean
+): CharacterAnalysis {
+    val charAtCol1 = if (col + 1 < width) line.charAt(col + 1) else null
+    val charAtCol2 = if (col + 2 < width) line.charAt(col + 2) else null
+
+    // Handle surrogate pairs
+    val lowSurrogate = if (Character.isHighSurrogate(char)) {
+        when {
+            charAtCol1 != null && Character.isLowSurrogate(charAtCol1) -> charAtCol1
+            charAtCol1 == CharUtils.DWC && charAtCol2 != null && Character.isLowSurrogate(charAtCol2) -> charAtCol2
+            else -> null
+        }
+    } else null
+
+    val actualCodePoint = if (lowSurrogate != null && Character.isLowSurrogate(lowSurrogate)) {
+        Character.toCodePoint(char, lowSurrogate)
+    } else char.code
+
+    val charTextToRender = if (lowSurrogate != null && Character.isLowSurrogate(lowSurrogate)) {
+        "$char$lowSurrogate"
+    } else {
+        char.toString()
+    }
+
+    // Double-width detection
+    val wcwidthResult = char != ' ' && char != '\u0000' &&
+        CharUtils.isDoubleWidthCharacter(actualCodePoint, ambiguousCharsAreDoubleWidth)
+
+    // Check for DWC at col+1, OR DWC at col+2 when col+1 is variation selector
+    // For emoji+VS like ⚠️: Buffer = [⚠][FE0F][DWC] - DWC is at col+2
+    val hasVariationSelectorAtCol1 = charAtCol1 != null && (charAtCol1.code == 0xFE0F || charAtCol1.code == 0xFE0E)
+    val isWcwidthDoubleWidth = charAtCol1 == CharUtils.DWC ||
+        (hasVariationSelectorAtCol1 && charAtCol2 == CharUtils.DWC) ||
+        wcwidthResult
+
+    val isBaseDoubleWidth = if (actualCodePoint >= 0x1F100) true else isWcwidthDoubleWidth
+
+    // Check for variation selector - handle both DWC and non-DWC cases
+    val nextCharOffset = if (isWcwidthDoubleWidth) 2 else 1
+    val nextChar = if (col + nextCharOffset < width) line.charAt(col + nextCharOffset) else null
+    val hasVariationSelector = (nextChar != null && (nextChar.code == 0xFE0F || nextChar.code == 0xFE0E)) ||
+        hasVariationSelectorAtCol1
+    val isEmojiWithVariationSelector = hasVariationSelector
+
+    val isDoubleWidth = isBaseDoubleWidth || isEmojiWithVariationSelector
+    val visualWidth = if (isDoubleWidth) 2 else 1
+
+    // Character classification for font selection
+    val isCursiveOrMath = actualCodePoint in 0x1D400..0x1D7FF
+    val isTechnicalSymbol = actualCodePoint in 0x23E9..0x23FF
+    val isEmojiOrWideSymbol = when (actualCodePoint) {
+        in 0x2600..0x26FF -> when (actualCodePoint) {
+            0x2605, 0x2606 -> false  // ★ ☆ (text symbols)
+            in 0x2660..0x2667 -> false  // ♠ ♡ ♢ ♣ ♤ ♥ ♦ ♧ (card suits)
+            else -> true
+        }
+        in 0x1F100..0x1F1FF -> true
+        in 0x1F300..0x1F9FF -> true
+        in 0x1F600..0x1F64F -> true
+        in 0x1F680..0x1F6FF -> true
+        else -> false
+    }
+
+    return CharacterAnalysis(
+        actualCodePoint = actualCodePoint,
+        lowSurrogate = lowSurrogate,
+        charTextToRender = charTextToRender,
+        isWcwidthDoubleWidth = isWcwidthDoubleWidth,
+        isBaseDoubleWidth = isBaseDoubleWidth,
+        hasVariationSelector = hasVariationSelector,
+        isEmojiWithVariationSelector = isEmojiWithVariationSelector,
+        isDoubleWidth = isDoubleWidth,
+        visualWidth = visualWidth,
+        isCursiveOrMath = isCursiveOrMath,
+        isTechnicalSymbol = isTechnicalSymbol,
+        isEmojiOrWideSymbol = isEmojiOrWideSymbol
+    )
+}
+
+/**
  * Terminal canvas renderer that handles all drawing operations.
  * Separates rendering logic from the composable for better maintainability.
  */
@@ -188,45 +297,8 @@ object TerminalCanvasRenderer {
                 val x = kotlin.math.floor(visualCol * ctx.cellWidth)
                 val y = kotlin.math.floor(row * ctx.cellHeight)
 
-                // Handle surrogate pairs (must match renderText logic lines 384-398)
-                val charAtCol1 = if (col + 1 < ctx.visibleCols) line.charAt(col + 1) else null
-                val charAtCol2 = if (col + 2 < ctx.visibleCols) line.charAt(col + 2) else null
-
-                val lowSurrogate = if (Character.isHighSurrogate(char)) {
-                    when {
-                        charAtCol1 != null && Character.isLowSurrogate(charAtCol1) -> charAtCol1
-                        charAtCol1 == CharUtils.DWC && charAtCol2 != null && Character.isLowSurrogate(charAtCol2) -> charAtCol2
-                        else -> null
-                    }
-                } else null
-
-                val actualCodePoint = if (lowSurrogate != null && Character.isLowSurrogate(lowSurrogate)) {
-                    Character.toCodePoint(char, lowSurrogate)
-                } else char.code
-
-                // Check if double-width (must match renderText logic lines 400-402)
-                val wcwidthResult = char != ' ' && char != '\u0000' &&
-                    CharUtils.isDoubleWidthCharacter(actualCodePoint, ctx.ambiguousCharsAreDoubleWidth)
-                // Check for DWC at col+1, OR DWC at col+2 when col+1 is variation selector
-                // For emoji+VS like ⚠️: Buffer = [⚠][FE0F][DWC] - DWC is at col+2
-                val hasVariationSelector = charAtCol1 != null && (charAtCol1.code == 0xFE0F || charAtCol1.code == 0xFE0E)
-                val isWcwidthDoubleWidth = charAtCol1 == CharUtils.DWC ||
-                    (hasVariationSelector && charAtCol2 == CharUtils.DWC) ||
-                    wcwidthResult
-
-                // Base double-width check
-                val isBaseDoubleWidth = if (actualCodePoint >= 0x1F100) true else isWcwidthDoubleWidth
-
-                // Any character followed by variation selector (FE0F/FE0E) should be 2-cell
-                // This handles cases like ❤️ (U+2764 + FE0F) which is in Dingbats range
-                // hasVariationSelector already checks charAtCol1 for FE0F/FE0E
-                val isEmojiWithVariationSelector = hasVariationSelector
-
-                // Emoji with variation selector should be double-width (must match renderText)
-                val isDoubleWidth = isBaseDoubleWidth || isEmojiWithVariationSelector
-
-                // Determine visual width
-                val visualWidth = if (isDoubleWidth) 2 else 1
+                // Use shared character analysis helper
+                val analysis = analyzeCharacter(char, line, col, ctx.visibleCols, ctx.ambiguousCharsAreDoubleWidth)
 
                 // Get attributes
                 val isInverse = style?.hasOption(BossTextStyle.Option.INVERSE) ?: false
@@ -243,7 +315,7 @@ object TerminalCanvasRenderer {
                 // Skip drawing if background matches default (canvas already has default bg)
                 if (bgColor != ctx.settings.defaultBackgroundColor) {
                     // Calculate background dimensions using visual positions
-                    val nextVisualCol = visualCol + visualWidth
+                    val nextVisualCol = visualCol + analysis.visualWidth
                     val nextX = kotlin.math.ceil(nextVisualCol * ctx.cellWidth)
                     val bgWidth = nextX - x
                     val nextRow = row + 1
@@ -262,12 +334,12 @@ object TerminalCanvasRenderer {
 
                 // Advance buffer position (must match renderText col advancement)
                 col++
-                if (isWcwidthDoubleWidth) col++  // Skip DWC marker
-                if (isEmojiWithVariationSelector) col++  // Skip variation selector
-                if (lowSurrogate != null) col++  // Skip low surrogate
+                if (analysis.isWcwidthDoubleWidth) col++  // Skip DWC marker
+                if (analysis.isEmojiWithVariationSelector) col++  // Skip variation selector
+                if (analysis.lowSurrogate != null) col++  // Skip low surrogate
 
                 // Advance visual position
-                visualCol += visualWidth
+                visualCol += analysis.visualWidth
             }
         }
     }
@@ -432,64 +504,15 @@ object TerminalCanvasRenderer {
                 val x = visualCol * ctx.cellWidth
                 val y = row * ctx.cellHeight
 
-                // Handle surrogate pairs
-                val charAtCol1 = if (col + 1 < snapshot.width) line.charAt(col + 1) else null
-                val charAtCol2 = if (col + 2 < snapshot.width) line.charAt(col + 2) else null
+                // Use shared character analysis helper
+                val analysis = analyzeCharacter(char, line, col, snapshot.width, ctx.ambiguousCharsAreDoubleWidth)
 
-                val lowSurrogate = if (Character.isHighSurrogate(char)) {
-                    when {
-                        charAtCol1 != null && Character.isLowSurrogate(charAtCol1) -> charAtCol1
-                        charAtCol1 == CharUtils.DWC && charAtCol2 != null && Character.isLowSurrogate(charAtCol2) -> charAtCol2
-                        else -> null
-                    }
-                } else null
-
-                val actualCodePoint = if (lowSurrogate != null && Character.isLowSurrogate(lowSurrogate)) {
-                    Character.toCodePoint(char, lowSurrogate)
-                } else char.code
-
-                val wcwidthResult = char != ' ' && char != '\u0000' &&
-                    CharUtils.isDoubleWidthCharacter(actualCodePoint, ctx.ambiguousCharsAreDoubleWidth)
-                val isWcwidthDoubleWidth = charAtCol1 == CharUtils.DWC || wcwidthResult
-
-                val charTextToRender = if (lowSurrogate != null && Character.isLowSurrogate(lowSurrogate)) {
-                    "$char$lowSurrogate"
-                } else {
-                    char.toString()
-                }
-
-                // Character classification
-                val isCursiveOrMath = actualCodePoint in 0x1D400..0x1D7FF
-                val isTechnicalSymbol = actualCodePoint in 0x23E9..0x23FF
-                val isEmojiOrWideSymbol = when (actualCodePoint) {
-                    // Misc symbols - but exclude text presentation symbols
-                    in 0x2600..0x26FF -> when (actualCodePoint) {
-                        // Exclude stars (text symbols)
-                        0x2605, 0x2606 -> false  // ★ ☆
-                        // Exclude card suits (text symbols)
-                        in 0x2660..0x2667 -> false  // ♠ ♡ ♢ ♣ ♤ ♥ ♦ ♧
-                        else -> true
-                    }
-                    in 0x1F100..0x1F1FF -> true
-                    in 0x1F300..0x1F9FF -> true
-                    in 0x1F600..0x1F64F -> true
-                    in 0x1F680..0x1F6FF -> true
-                    else -> false
-                }
-
-                val isBaseDoubleWidth = if (actualCodePoint >= 0x1F100) true else isWcwidthDoubleWidth
-
-                // Check for variation selector - any character followed by FE0F/FE0E is emoji presentation
-                val nextCharOffset = if (isWcwidthDoubleWidth) 2 else 1
+                // Get nextChar for rendering emoji with variation selectors
+                val nextCharOffset = if (analysis.isWcwidthDoubleWidth) 2 else 1
                 val nextChar = if (col + nextCharOffset < snapshot.width) line.charAt(col + nextCharOffset) else null
-                val hasVariationSelector = nextChar != null && (nextChar.code == 0xFE0F || nextChar.code == 0xFE0E)
-                val isEmojiWithVariationSelector = hasVariationSelector
-
-                // Emoji with variation selector should be double-width
-                val isDoubleWidth = isBaseDoubleWidth || isEmojiWithVariationSelector
 
                 // Skip standalone variation selectors
-                if ((char.code == 0xFE0F || char.code == 0xFE0E) && !isEmojiOrWideSymbol) {
+                if ((char.code == 0xFE0F || char.code == 0xFE0E) && !analysis.isEmojiOrWideSymbol) {
                     col++
                     continue
                 }
@@ -518,7 +541,7 @@ object TerminalCanvasRenderer {
                     else -> true
                 }
 
-                val canBatch = !isDoubleWidth && !isEmojiOrWideSymbol && !isCursiveOrMath && !isTechnicalSymbol &&
+                val canBatch = !analysis.isDoubleWidth && !analysis.isEmojiOrWideSymbol && !analysis.isCursiveOrMath && !analysis.isTechnicalSymbol &&
                     !isHidden && isBlinkVisible && char != ' ' && char != '\u0000'
 
                 val styleMatches = batchText.isNotEmpty() &&
@@ -541,23 +564,23 @@ object TerminalCanvasRenderer {
 
                     if (char != ' ' && char != '\u0000' && !isHidden && isBlinkVisible) {
                         renderCharacter(
-                            ctx, x, y, charTextToRender, actualCodePoint,
-                            isDoubleWidth, isEmojiOrWideSymbol, isEmojiWithVariationSelector,
-                            isCursiveOrMath, isTechnicalSymbol, nextChar,
+                            ctx, x, y, analysis.charTextToRender, analysis.actualCodePoint,
+                            analysis.isDoubleWidth, analysis.isEmojiOrWideSymbol, analysis.isEmojiWithVariationSelector,
+                            analysis.isCursiveOrMath, analysis.isTechnicalSymbol, nextChar,
                             fgColor, isBold, isItalic, isUnderline
                         )
 
-                        if (isEmojiWithVariationSelector) {
+                        if (analysis.isEmojiWithVariationSelector) {
                             col++
                         }
                     }
                 }
 
-                if (isWcwidthDoubleWidth) col++
+                if (analysis.isWcwidthDoubleWidth) col++
                 col++
-                if (lowSurrogate != null) col++
+                if (analysis.lowSurrogate != null) col++
                 visualCol++
-                if (isDoubleWidth) visualCol++
+                if (analysis.isDoubleWidth) visualCol++
             }
 
             flushBatch()
