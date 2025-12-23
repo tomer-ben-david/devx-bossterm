@@ -226,10 +226,12 @@ object GraphemeUtils {
      * they are often used as 1-cell text symbols in TUI applications. They will render
      * as 2-cell emoji ONLY when followed by variation selector FE0F.
      *
+     * Used by both buffer (for DWC markers) and renderer (for font selection).
+     *
      * @param codePoint The Unicode code point to check
      * @return True if this character should render as 2 cells by default
      */
-    private fun isEmojiPresentation(codePoint: Int): Boolean {
+    fun isEmojiPresentation(codePoint: Int): Boolean {
         return when {
             // === SUPPLEMENTARY PLANE EMOJI (always 2-cell) ===
             // Enclosed Alphanumeric Supplement (U+1F100-U+1F1FF) - includes regional indicators
