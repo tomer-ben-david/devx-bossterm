@@ -175,10 +175,12 @@ object TerminalCanvasRenderer {
                     }
                 }
 
-                // Skip gender symbols that are part of ZWJ sequences (♀ U+2640, ♂ U+2642)
+                // Skip gender symbols only when preceded by ZWJ (part of ZWJ sequences)
                 if (char.code == 0x2640 || char.code == 0x2642) {
-                    col++
-                    continue
+                    if (col > 0 && line.charAt(col - 1).code == 0x200D) {
+                        col++
+                        continue
+                    }
                 }
 
                 // Round to pixel boundaries to avoid anti-aliasing artifacts
@@ -633,6 +635,11 @@ object TerminalCanvasRenderer {
     /**
      * Render selection highlight rectangles.
      * Selection coordinates are in buffer columns but we render using visual columns.
+     *
+     * Note: Selection automatically snaps to grapheme boundaries - partial grapheme
+     * selection expands to include the entire grapheme. This is intentional behavior
+     * to ensure emoji, ZWJ sequences, and other multi-codepoint graphemes are
+     * always selected as complete units.
      */
     private fun DrawScope.renderSelectionHighlight(ctx: RenderingContext) {
         val start = ctx.selectionStart ?: return
