@@ -241,54 +241,23 @@ object TerminalCanvasRenderer {
                 val char = line.charAt(col)
                 val style = line.getStyleAt(col)
 
-                // Skip DWC markers (they don't occupy visual space)
-                if (char == CharUtils.DWC) {
-                    col++
-                    continue
-                }
-
-                // Skip standalone variation selectors (they don't occupy visual space)
-                if (char.code == 0xFE0F || char.code == 0xFE0E) {
-                    col++
-                    continue
-                }
-
-                // Skip Zero-Width Joiner and all subsequent chars until DWC
+                // Special handling for ZWJ: skip all characters until DWC
                 // ZWJ sequences like 👨‍💻 are: [emoji1][ZWJ][emoji2][DWC]
                 // We already rendered emoji1, now skip ZWJ and everything after until DWC
                 if (char.code == 0x200D) {
                     col++
-                    // Skip all characters until we hit DWC (end of grapheme)
-                    while (col < ctx.visibleCols) {
-                        val nextChar = line.charAt(col)
-                        if (nextChar == CharUtils.DWC) break
+                    while (col < ctx.visibleCols && line.charAt(col) != CharUtils.DWC) {
                         col++
                     }
                     continue
                 }
 
-                // Skip skin tone modifiers (U+1F3FB-U+1F3FF) - they extend the previous emoji
-                // These are surrogate pairs: high=0xD83C, low=0xDFFB-0xDFFF
-                if (Character.isHighSurrogate(char)) {
-                    val nextChar = if (col + 1 < ctx.visibleCols) line.charAt(col + 1) else null
-                    if (nextChar != null && Character.isLowSurrogate(nextChar)) {
-                        val codePoint = Character.toCodePoint(char, nextChar)
-                        // Skin tone modifiers
-                        if (codePoint in 0x1F3FB..0x1F3FF) {
-                            col += 2  // Skip both surrogate chars
-                            continue
-                        }
-                        // Male/female signs used in ZWJ sequences (♀️ U+2640, ♂️ U+2642)
-                        // These are BMP so handled below
-                    }
-                }
-
-                // Skip gender symbols only when preceded by ZWJ (part of ZWJ sequences)
-                if (char.code == 0x2640 || char.code == 0x2642) {
-                    if (col > 0 && line.charAt(col - 1).code == 0x200D) {
-                        col++
-                        continue
-                    }
+                // Use shared skip logic for simple cases (DWC, variation selectors,
+                // low surrogates, skin tones, gender symbols after ZWJ)
+                val skipResult = ColumnConversionUtils.shouldSkipChar(line, col, ctx.visibleCols)
+                if (skipResult.shouldSkip) {
+                    col += skipResult.colsToAdvance
+                    continue
                 }
 
                 // Handle Regional Indicator sequences (flag emoji) as a single unit

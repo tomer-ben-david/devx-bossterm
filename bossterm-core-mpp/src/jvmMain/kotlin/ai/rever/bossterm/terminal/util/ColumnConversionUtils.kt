@@ -15,11 +15,11 @@ object ColumnConversionUtils {
      * @param shouldSkip True if the character should be skipped
      * @param colsToAdvance Number of columns to advance (1 for single char, 2 for surrogate pair)
      */
-    private data class SkipResult(val shouldSkip: Boolean, val colsToAdvance: Int = 1)
+    data class SkipResult(val shouldSkip: Boolean, val colsToAdvance: Int = 1)
 
     /**
      * Check if character at given column should be skipped (doesn't consume visual space).
-     * This encapsulates the common skip logic used by both bufferColToVisualCol and visualColToBufferCol.
+     * This encapsulates the common skip logic used by column conversion and rendering.
      *
      * Characters that don't consume visual space:
      * - DWC markers (placeholder for second cell of double-width char)
@@ -29,7 +29,7 @@ object ColumnConversionUtils {
      * - Skin tone modifiers (when part of emoji sequence)
      * - Gender symbols (when preceded by ZWJ)
      */
-    private fun shouldSkipChar(line: TerminalLine, col: Int, width: Int): SkipResult {
+    fun shouldSkipChar(line: TerminalLine, col: Int, width: Int): SkipResult {
         val char = line.charAt(col)
 
         // Skip DWC markers (they don't add visual width)
