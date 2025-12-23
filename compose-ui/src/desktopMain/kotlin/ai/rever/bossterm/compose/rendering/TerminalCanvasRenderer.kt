@@ -22,6 +22,7 @@ import ai.rever.bossterm.terminal.model.pool.VersionedBufferSnapshot
 import ai.rever.bossterm.terminal.model.image.ImageCell
 import ai.rever.bossterm.terminal.model.image.ImageDataCache
 import ai.rever.bossterm.terminal.util.CharUtils
+import ai.rever.bossterm.terminal.util.ColumnConversionUtils
 import ai.rever.bossterm.terminal.TextStyle as BossTextStyle
 import org.jetbrains.skia.FontMgr
 
@@ -700,191 +701,18 @@ object TerminalCanvasRenderer {
     }
 
     /**
-     * Get the visual width of a character at a buffer position.
-     * Returns 2 for double-width characters (emoji, CJK), 1 otherwise.
-     *
-     * Detection strategy: Look ahead through grapheme extenders to find DWC marker.
-     * If DWC follows, character is double-width.
-     */
-    private fun getCharacterVisualWidth(line: TerminalLine, col: Int, width: Int): Int {
-        if (col >= width) return 1
-
-        val char = line.charAt(col)
-
-        // Simple case: next char is DWC (single BMP double-width char like CJK)
-        if (col + 1 < width && line.charAt(col + 1) == CharUtils.DWC) {
-            return 2
-        }
-
-        // For surrogate pairs and complex graphemes, scan forward through extenders
-        if (Character.isHighSurrogate(char)) {
-            var nextCol = col + 1
-            while (nextCol < width) {
-                val nextChar = line.charAt(nextCol)
-                // Found DWC marker - this grapheme is double-width
-                if (nextChar == CharUtils.DWC) return 2
-                // Continue through grapheme extenders
-                if (Character.isLowSurrogate(nextChar) ||
-                    nextChar.code == 0xFE0E || nextChar.code == 0xFE0F ||
-                    nextChar.code == 0x200D ||
-                    nextChar.code == 0x2640 || nextChar.code == 0x2642) {
-                    nextCol++
-                    continue
-                }
-                // Check for skin tone modifier (surrogate pair starting with high surrogate)
-                if (Character.isHighSurrogate(nextChar) && nextCol + 1 < width) {
-                    val afterNext = line.charAt(nextCol + 1)
-                    if (Character.isLowSurrogate(afterNext)) {
-                        val cp = Character.toCodePoint(nextChar, afterNext)
-                        if (cp in 0x1F3FB..0x1F3FF) {
-                            nextCol += 2
-                            continue
-                        }
-                    }
-                }
-                break
-            }
-        }
-
-        return 1 // Default: single width
-    }
-
-    /**
      * Convert buffer column to visual column.
-     * Accounts for DWC markers, surrogate pairs, ZWJ sequences, and other grapheme extenders
-     * that don't consume visual space.
+     * Delegates to shared ColumnConversionUtils.
      */
-    fun bufferColToVisualCol(line: TerminalLine, bufferCol: Int, width: Int): Int {
-        var visualCol = 0
-        var col = 0
-        while (col < bufferCol && col < width) {
-            val char = line.charAt(col)
-
-            // Skip DWC markers (they don't add visual width)
-            if (char == CharUtils.DWC) {
-                col++
-                continue
-            }
-
-            // Skip variation selectors (FE0E, FE0F)
-            if (char.code == 0xFE0E || char.code == 0xFE0F) {
-                col++
-                continue
-            }
-
-            // Skip ZWJ (U+200D)
-            if (char.code == 0x200D) {
-                col++
-                continue
-            }
-
-            // Skip low surrogates (they're part of previous high surrogate)
-            if (Character.isLowSurrogate(char)) {
-                col++
-                continue
-            }
-
-            // Skip skin tone modifiers (U+1F3FB-U+1F3FF, encoded as surrogate pairs)
-            if (Character.isHighSurrogate(char) && col + 1 < width) {
-                val nextChar = line.charAt(col + 1)
-                if (Character.isLowSurrogate(nextChar)) {
-                    val codePoint = Character.toCodePoint(char, nextChar)
-                    if (codePoint in 0x1F3FB..0x1F3FF) {
-                        col += 2
-                        continue
-                    }
-                }
-            }
-
-            // Skip gender symbols when they're part of ZWJ sequences
-            if (char.code == 0x2640 || char.code == 0x2642) {
-                // Check if preceded by ZWJ
-                if (col > 0 && line.charAt(col - 1).code == 0x200D) {
-                    col++
-                    continue
-                }
-            }
-
-            // Regular character - count visual width (1 or 2 for double-width)
-            visualCol += getCharacterVisualWidth(line, col, width)
-            col++
-        }
-        return visualCol
-    }
+    fun bufferColToVisualCol(line: TerminalLine, bufferCol: Int, width: Int): Int =
+        ColumnConversionUtils.bufferColToVisualCol(line, bufferCol, width)
 
     /**
      * Convert visual column to buffer column.
-     * Returns the buffer column at the START of the grapheme at the given visual position.
-     * This is used for click handling to snap to grapheme boundaries.
+     * Delegates to shared ColumnConversionUtils.
      */
-    fun visualColToBufferCol(line: TerminalLine, visualCol: Int, width: Int): Int {
-        var currentVisualCol = 0
-        var col = 0
-        var lastGraphemeStart = 0
-
-        while (col < width && currentVisualCol <= visualCol) {
-            val char = line.charAt(col)
-
-            // Skip DWC markers
-            if (char == CharUtils.DWC) {
-                col++
-                continue
-            }
-
-            // Skip variation selectors
-            if (char.code == 0xFE0E || char.code == 0xFE0F) {
-                col++
-                continue
-            }
-
-            // Skip ZWJ
-            if (char.code == 0x200D) {
-                col++
-                continue
-            }
-
-            // Skip low surrogates
-            if (Character.isLowSurrogate(char)) {
-                col++
-                continue
-            }
-
-            // Skip skin tone modifiers
-            if (Character.isHighSurrogate(char) && col + 1 < width) {
-                val nextChar = line.charAt(col + 1)
-                if (Character.isLowSurrogate(nextChar)) {
-                    val codePoint = Character.toCodePoint(char, nextChar)
-                    if (codePoint in 0x1F3FB..0x1F3FF) {
-                        col += 2
-                        continue
-                    }
-                }
-            }
-
-            // Skip gender symbols in ZWJ sequences
-            if (char.code == 0x2640 || char.code == 0x2642) {
-                if (col > 0 && line.charAt(col - 1).code == 0x200D) {
-                    col++
-                    continue
-                }
-            }
-
-            // Found a visual character
-            val charWidth = getCharacterVisualWidth(line, col, width)
-
-            // Check if visualCol falls within this character's visual range
-            if (visualCol >= currentVisualCol && visualCol < currentVisualCol + charWidth) {
-                return col  // Snap to start of this grapheme
-            }
-
-            lastGraphemeStart = col
-            currentVisualCol += charWidth
-            col++
-        }
-
-        // If we're past the end, return last valid position
-        return if (col >= width) width - 1 else lastGraphemeStart
-    }
+    fun visualColToBufferCol(line: TerminalLine, visualCol: Int, width: Int): Int =
+        ColumnConversionUtils.visualColToBufferCol(line, visualCol, width)
 
     /**
      * Find the buffer column range for a grapheme at the given buffer column.
