@@ -317,6 +317,48 @@ object TerminalCanvasRenderer {
                     }
                 }
 
+                // Handle Regional Indicator sequences (flag emoji) as a single unit
+                // Flags like 🇺🇸 are two Regional Indicators that should render as one 2-cell glyph
+                if (checkRegionalIndicatorSequence(line, col, ctx.visibleCols)) {
+                    val x = kotlin.math.floor(visualCol * ctx.cellWidth)
+                    val y = kotlin.math.floor(row * ctx.cellHeight)
+
+                    // Get attributes for background
+                    val isInverse = style?.hasOption(BossTextStyle.Option.INVERSE) ?: false
+                    val baseFg = style?.foreground?.let { ColorUtils.convertTerminalColor(it) }
+                        ?: ctx.settings.defaultForegroundColor
+                    val baseBg = style?.background?.let { ColorUtils.convertTerminalColor(it) }
+                        ?: ctx.settings.defaultBackgroundColor
+                    val bgColor = if (isInverse) baseFg else baseBg
+
+                    // Draw 2-cell background for the flag
+                    if (bgColor != ctx.settings.defaultBackgroundColor) {
+                        val nextVisualCol = visualCol + 2
+                        val nextX = kotlin.math.ceil(nextVisualCol * ctx.cellWidth)
+                        val bgWidth = nextX - x
+                        val nextRow = row + 1
+                        val nextY = kotlin.math.ceil(nextRow * ctx.cellHeight)
+                        val bgHeight = if (ctx.settings.fillBackgroundInLineSpacing) {
+                            nextY - y
+                        } else {
+                            ctx.baseCellHeight
+                        }
+                        drawRect(
+                            color = bgColor,
+                            topLeft = Offset(x.toFloat(), y.toFloat()),
+                            size = Size(bgWidth.toFloat(), bgHeight.toFloat())
+                        )
+                    }
+
+                    // Skip all chars in the flag sequence (2 surrogate pairs + possible DWC markers)
+                    col += 4  // Skip both Regional Indicators (2 surrogate pairs = 4 chars)
+                    while (col < ctx.visibleCols && line.charAt(col) == CharUtils.DWC) {
+                        col++  // Skip any trailing DWC markers
+                    }
+                    visualCol += 2
+                    continue
+                }
+
                 // Round to pixel boundaries to avoid anti-aliasing artifacts
                 // Use visualCol for x position to match renderText
                 val x = kotlin.math.floor(visualCol * ctx.cellWidth)
@@ -511,12 +553,13 @@ object TerminalCanvasRenderer {
 
                 val hasZWJ = cleanText.contains('\u200D')
                 val hasSkinTone = checkFollowingSkinTone(line, col, snapshot.width)
+                val hasRegionalIndicator = checkRegionalIndicatorSequence(line, col, snapshot.width)
 
-                if (hasZWJ || hasSkinTone) {
+                if (hasZWJ || hasSkinTone || hasRegionalIndicator) {
                     val graphemes = ai.rever.bossterm.terminal.util.GraphemeUtils.segmentIntoGraphemes(cleanText)
                     if (graphemes.isNotEmpty()) {
                         val grapheme = graphemes[0]
-                        if (grapheme.hasZWJ || hasSkinTone) {
+                        if (grapheme.hasZWJ || hasSkinTone || hasRegionalIndicator) {
                             flushBatch()
                             val (colsSkipped, visualWidth) = renderZWJSequence(
                                 ctx, row, visualCol, col, grapheme, line, snapshot.width, style
@@ -929,6 +972,36 @@ object TerminalCanvasRenderer {
             }
         }
 
+        return false
+    }
+
+    /**
+     * Check if current position starts a Regional Indicator sequence (flag emoji).
+     * Regional Indicators are surrogate pairs with high surrogate 0xD83C and low surrogate 0xDDE6-0xDDFF.
+     * Two consecutive Regional Indicators form a flag (e.g., 🇺🇸 = U+1F1FA + U+1F1F8).
+     */
+    private fun checkRegionalIndicatorSequence(line: TerminalLine, col: Int, width: Int): Boolean {
+        if (col + 3 >= width) return false  // Need at least 4 chars for 2 surrogate pairs
+
+        val c1 = line.charAt(col)
+        val c2 = line.charAt(col + 1)
+
+        // Check if first char is high surrogate for Regional Indicator (0xD83C)
+        // and second char is low surrogate in Regional Indicator range (0xDDE6-0xDDFF)
+        if (c1 == '\uD83C' && c2.code in 0xDDE6..0xDDFF) {
+            // Check for second Regional Indicator (may have DWC between them)
+            var nextCol = col + 2
+            if (nextCol < width && line.charAt(nextCol) == CharUtils.DWC) {
+                nextCol++
+            }
+            if (nextCol + 1 < width) {
+                val c3 = line.charAt(nextCol)
+                val c4 = line.charAt(nextCol + 1)
+                if (c3 == '\uD83C' && c4.code in 0xDDE6..0xDDFF) {
+                    return true
+                }
+            }
+        }
         return false
     }
 

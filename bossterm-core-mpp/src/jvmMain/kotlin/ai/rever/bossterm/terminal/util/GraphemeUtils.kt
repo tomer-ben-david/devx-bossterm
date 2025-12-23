@@ -157,6 +157,13 @@ object GraphemeUtils {
             return 2
         }
 
+        // Check for Regional Indicator sequence (flag emoji)
+        // Regional Indicators are in range U+1F1E6 to U+1F1FF
+        // Two consecutive Regional Indicators form a flag (e.g., 🇺🇸 = U+1F1FA + U+1F1F8)
+        if (codePoints.size >= 2 && codePoints.all { it in 0x1F1E6..0x1F1FF }) {
+            return 2  // Flag emoji
+        }
+
         // Check for variation selector
         val hasVariationSelector = codePoints.contains(0xFE0E) || codePoints.contains(0xFE0F)
 
