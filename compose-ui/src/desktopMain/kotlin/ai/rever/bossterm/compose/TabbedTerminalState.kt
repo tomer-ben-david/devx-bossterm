@@ -13,6 +13,21 @@ import ai.rever.bossterm.compose.tabs.TerminalTab
  * when used within another tab system or navigation framework. Without this, switching
  * away from a TabbedTerminal and back would lose all terminal sessions.
  *
+ * ## Thread Safety
+ *
+ * This class is designed for use with Compose, which performs recomposition on the main
+ * thread. All state access and mutations should occur on the main/UI thread. The class
+ * is not thread-safe for concurrent access from multiple threads.
+ *
+ * ## Lifecycle Notes
+ *
+ * - **Before initialization**: All property accessors return safe defaults (empty list,
+ *   0, null). Tab management methods are silently ignored.
+ * - **After disposal**: Same behavior as before initialization. The state can be reused
+ *   by composing TabbedTerminal again, which will re-initialize it.
+ * - **Initialization**: Happens automatically when TabbedTerminal is first composed
+ *   with this state. Only initializes once; subsequent compositions are no-ops.
+ *
  * ## Usage Patterns
  *
  * ### Pattern 1: Auto-managed lifecycle (default)
@@ -125,6 +140,9 @@ class TabbedTerminalState {
 
     /**
      * Create a new terminal tab.
+     *
+     * Note: This method requires the state to be initialized (automatically happens
+     * when TabbedTerminal is composed). Calls before initialization are silently ignored.
      *
      * @param workingDir Working directory to start the shell in (null = home directory)
      * @param initialCommand Optional command to run after terminal is ready
