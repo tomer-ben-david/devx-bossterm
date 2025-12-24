@@ -70,6 +70,48 @@ object GraphemeUtils {
     }
 
     /**
+     * Extracts only the last grapheme cluster from a string.
+     *
+     * Much more efficient than segmentIntoGraphemes() when only the last
+     * grapheme is needed (e.g., for REP command tracking).
+     *
+     * Uses reverse iteration to find the last grapheme boundary, with
+     * fast paths for common cases:
+     * - Empty string: returns null
+     * - Single character: returns the character as string
+     * - ASCII ending: returns the last character (no BreakIterator needed)
+     *
+     * @param text The string to analyze
+     * @return The last grapheme cluster as a string, or null if empty
+     */
+    fun getLastGrapheme(text: String): String? {
+        if (text.isEmpty()) return null
+
+        // Fast path: single character
+        if (text.length == 1) return text
+
+        // Fast path: last char is ASCII and not a grapheme extender
+        val lastChar = text.last()
+        if (lastChar.code < 0x80 && !isGraphemeExtender(lastChar)) {
+            return lastChar.toString()
+        }
+
+        // Use BreakIterator for complex cases
+        val iterator = breakIterator.get()
+        iterator.setText(text)
+
+        // Navigate to end and find previous boundary
+        val lastBoundary = iterator.last()
+        val prevBoundary = iterator.previous()
+
+        return if (prevBoundary != BreakIterator.DONE) {
+            text.substring(prevBoundary, lastBoundary)
+        } else {
+            text  // Entire string is one grapheme
+        }
+    }
+
+    /**
      * Finds all grapheme boundaries in a string.
      * Returns a list of indices where graphemes start.
      *

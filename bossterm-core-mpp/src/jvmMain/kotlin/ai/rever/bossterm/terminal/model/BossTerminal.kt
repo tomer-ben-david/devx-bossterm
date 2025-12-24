@@ -167,13 +167,10 @@ class BossTerminal(
                 myCursorX += characters.length
 
                 // Track last written character for REP (CSI Ps b)
+                // Use efficient getLastGrapheme() instead of full segmentation
                 val str = String(string)
                 if (str.isNotEmpty()) {
-                    // Get the last grapheme cluster
-                    val graphemes = GraphemeUtils.segmentIntoGraphemes(str)
-                    if (graphemes.isNotEmpty()) {
-                        myLastWrittenChar = graphemes.last().text
-                    }
+                    myLastWrittenChar = GraphemeUtils.getLastGrapheme(str)
                 }
             }
 
