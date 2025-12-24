@@ -110,7 +110,8 @@ fun TabbedTerminal(
     val isWindowFocusedState by remember { derivedStateOf { isWindowFocused() } }
 
     // Track SplitViewState per tab (tab.id -> SplitViewState)
-    val splitStates = remember { mutableStateMapOf<String, SplitViewState>() }
+    // Use external state's splitStates if provided, otherwise create internal ones
+    val splitStates = state?.splitStates ?: remember { mutableStateMapOf<String, SplitViewState>() }
 
     // Helper function to get or create SplitViewState for a tab
     fun getOrCreateSplitState(tab: TerminalTab): SplitViewState {
@@ -231,18 +232,17 @@ fun TabbedTerminal(
         splitStates.keys.removeAll { it !in currentTabIds }
     }
 
-    // Cleanup when composable is disposed or state changes
-    // Adding 'state' to keys ensures split states are cleaned up if state.dispose() is called
-    // while composable is still mounted
-    DisposableEffect(tabController, state) {
+    // Cleanup when composable is disposed
+    // Only dispose internal state - external TabbedTerminalState manages its own lifecycle
+    DisposableEffect(tabController) {
         onDispose {
-            // Dispose all split states
-            splitStates.values.forEach { it.dispose() }
-            splitStates.clear()
-            // Only dispose if using internal state (not external TabbedTerminalState)
             if (state == null) {
+                // Internal state: dispose everything
+                splitStates.values.forEach { it.dispose() }
+                splitStates.clear()
                 tabController.disposeAll()
             }
+            // External state: don't dispose - TabbedTerminalState.dispose() handles cleanup
         }
     }
 

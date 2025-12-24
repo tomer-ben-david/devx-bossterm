@@ -1,7 +1,9 @@
 package ai.rever.bossterm.compose
 
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import ai.rever.bossterm.compose.settings.TerminalSettings
+import ai.rever.bossterm.compose.splits.SplitViewState
 import ai.rever.bossterm.compose.tabs.TabController
 import ai.rever.bossterm.compose.tabs.TerminalSessionListener
 import ai.rever.bossterm.compose.tabs.TerminalTab
@@ -72,6 +74,12 @@ class TabbedTerminalState {
     private var initialized = false
 
     /**
+     * Split view states per tab (tab.id -> SplitViewState).
+     * Stored here to persist across recomposition when TabbedTerminal unmounts.
+     */
+    internal val splitStates: SnapshotStateMap<String, SplitViewState> = mutableStateMapOf()
+
+    /**
      * List of all terminal tabs (observable, triggers recomposition).
      */
     val tabs: List<TerminalTab>
@@ -131,6 +139,10 @@ class TabbedTerminalState {
      * After disposal, this state can be reused by calling TabbedTerminal again.
      */
     fun dispose() {
+        // Dispose all split states
+        splitStates.values.forEach { it.dispose() }
+        splitStates.clear()
+        // Dispose tab controller
         tabController?.disposeAll()
         tabController = null
         initialized = false
