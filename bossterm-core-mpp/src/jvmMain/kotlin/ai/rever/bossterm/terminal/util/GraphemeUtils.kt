@@ -20,10 +20,16 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object GraphemeUtils {
     /**
-     * LRU cache for grapheme width calculations.
-     * Caches complex grapheme clusters to avoid repeated segmentation.
+     * Maximum cache size for grapheme width calculations.
      */
-    private val widthCache = LRUCache<String, Int>(1024)
+    private const val MAX_CACHE_SIZE = 1024
+
+    /**
+     * Lock-free cache for grapheme width calculations.
+     * Uses ConcurrentHashMap for thread-safe access without lock contention.
+     * Trade-off: No LRU eviction, but terminal workloads have minimal cache churn.
+     */
+    private val widthCache = ConcurrentHashMap<String, Int>(MAX_CACHE_SIZE)
 
     /**
      * Thread-local BreakIterator for grapheme segmentation.
@@ -31,6 +37,121 @@ object GraphemeUtils {
      */
     private val breakIterator: ThreadLocal<BreakIterator> = ThreadLocal.withInitial {
         BreakIterator.getCharacterInstance()
+    }
+
+    /**
+     * Thread-local buffer for code point extraction.
+     * Avoids allocating IntArray for each width calculation.
+     * Size 16 covers all practical grapheme clusters (typical max is 7-8 code points for complex ZWJ).
+     */
+    private val codePointBuffer: ThreadLocal<IntArray> = ThreadLocal.withInitial {
+        IntArray(16)
+    }
+
+    // ==================== FAST-PATH DETECTION FUNCTIONS ====================
+    // These O(1) checks allow avoiding full grapheme segmentation for simple cases
+
+    /**
+     * O(1) check for Zero-Width Joiner presence.
+     * ZWJ (U+200D) joins emoji into composite sequences like family emoji.
+     *
+     * @param text The string to check
+     * @return True if text contains ZWJ
+     */
+    fun containsZWJ(text: String): Boolean {
+        for (i in text.indices) {
+            if (text[i].code == UnicodeConstants.ZWJ) return true
+        }
+        return false
+    }
+
+    /**
+     * O(n) check for skin tone modifier presence.
+     * Skin tones are in the supplementary plane (U+1F3FB..U+1F3FF),
+     * so we need to check surrogate pairs.
+     *
+     * @param text The string to check
+     * @return True if text contains skin tone modifier
+     */
+    fun containsSkinTone(text: String): Boolean {
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            if (c.isHighSurrogate() && i + 1 < text.length) {
+                val cp = Character.toCodePoint(c, text[i + 1])
+                if (cp in UnicodeConstants.SKIN_TONE_RANGE) return true
+                i += 2
+            } else {
+                i++
+            }
+        }
+        return false
+    }
+
+    /**
+     * O(n) check for variation selector presence.
+     * Variation selectors (VS15=U+FE0E, VS16=U+FE0F) modify character presentation.
+     *
+     * @param text The string to check
+     * @return True if text contains variation selector
+     */
+    fun containsVariationSelector(text: String): Boolean {
+        for (i in text.indices) {
+            val c = text[i].code
+            if (c == UnicodeConstants.VARIATION_SELECTOR_TEXT || c == UnicodeConstants.VARIATION_SELECTOR_EMOJI) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * Attempts to extract the first grapheme without full ICU4J segmentation.
+     * Returns null if the text contains complex grapheme boundaries that require
+     * proper segmentation (ZWJ sequences, skin tones, etc.).
+     *
+     * Fast paths:
+     * - Empty string -> null
+     * - Single ASCII char -> that char
+     * - Simple supplementary plane char (no modifiers) -> the 2-char surrogate pair
+     *
+     * @param text The string to analyze
+     * @return The first grapheme as a string, or null if complex segmentation needed
+     */
+    fun getFirstGraphemeSimple(text: String): String? {
+        if (text.isEmpty()) return null
+
+        // Fast path: single ASCII character
+        if (text.length == 1) {
+            val code = text[0].code
+            if (code < 0x80) return text
+        }
+
+        // Check for complex sequences that require full segmentation
+        if (containsZWJ(text)) return null
+        if (containsSkinTone(text)) return null
+        if (containsVariationSelector(text)) return null
+
+        // Simple surrogate pair (supplementary plane character without modifiers)
+        val firstChar = text[0]
+        if (firstChar.isHighSurrogate() && text.length >= 2 && text[1].isLowSurrogate()) {
+            // Check if there's more after the surrogate pair
+            if (text.length == 2) return text
+            // Check if the third char is a grapheme extender
+            if (!isGraphemeExtender(text[2])) {
+                return text.substring(0, 2)
+            }
+        }
+
+        return null // Fall back to full segmentation
+    }
+
+    /**
+     * Clears the grapheme width cache.
+     * Useful for testing or when theme/palette changes affect rendering.
+     */
+    fun clearCache() {
+        widthCache.clear()
     }
 
     /**
@@ -143,7 +264,7 @@ object GraphemeUtils {
      * - Skin tone modifiers: width 2 (not 4)
      * - Combining characters: width 0
      *
-     * Results are cached for performance.
+     * Results are cached for performance using lock-free ConcurrentHashMap.
      *
      * @param grapheme The grapheme cluster text
      * @param ambiguousIsDWC Whether ambiguous-width characters are treated as double-width
@@ -162,13 +283,17 @@ object GraphemeUtils {
             return CharUtils.mk_wcwidth(codePoint, ambiguousIsDWC).coerceAtLeast(0)
         }
 
-        // Check cache
+        // Check cache (lock-free read)
         val cacheKey = if (ambiguousIsDWC) "$grapheme:DWC" else grapheme
         widthCache[cacheKey]?.let { return it }
 
         // Calculate width for complex grapheme
         val width = calculateGraphemeWidth(grapheme, ambiguousIsDWC)
-        widthCache[cacheKey] = width
+
+        // Cache if we have room (lock-free write)
+        if (widthCache.size < MAX_CACHE_SIZE) {
+            widthCache[cacheKey] = width
+        }
         return width
     }
 
@@ -180,41 +305,49 @@ object GraphemeUtils {
      * - Variation selectors: Don't add to width
      * - Skin tone modifiers: Don't add to width
      * - Combining characters: Width 0
+     *
+     * Uses ThreadLocal buffer to avoid allocation per call.
      */
     private fun calculateGraphemeWidth(grapheme: String, ambiguousIsDWC: Boolean): Int {
         if (grapheme.isEmpty()) return 0
 
-        // Extract code points
-        val codePoints = mutableListOf<Int>()
-        var offset = 0
-        while (offset < grapheme.length) {
-            val codePoint = grapheme.codePointAt(offset)
-            codePoints.add(codePoint)
-            offset += Character.charCount(codePoint)
-        }
+        // Extract code points into ThreadLocal buffer (avoids allocation)
+        val buffer = codePointBuffer.get()
+        val count = extractCodePoints(grapheme, buffer)
 
         // Check for ZWJ sequence (multiple emoji joined)
-        if (codePoints.contains(UnicodeConstants.ZWJ)) {
-            // ZWJ sequence: treat as single emoji (width 2)
-            return 2
+        for (i in 0 until count) {
+            if (buffer[i] == UnicodeConstants.ZWJ) {
+                return 2  // ZWJ sequence: treat as single emoji
+            }
         }
 
         // Check for Regional Indicator sequence (flag emoji)
         // Two consecutive Regional Indicators form a flag (e.g., 🇺🇸 = U+1F1FA + U+1F1F8)
-        if (codePoints.size >= 2 && codePoints.all { UnicodeConstants.isRegionalIndicator(it) }) {
-            return 2  // Flag emoji
+        if (count >= 2) {
+            var allRegional = true
+            for (i in 0 until count) {
+                if (!UnicodeConstants.isRegionalIndicator(buffer[i])) {
+                    allRegional = false
+                    break
+                }
+            }
+            if (allRegional) return 2  // Flag emoji
         }
 
-        // Check for variation selector
-        val hasVariationSelector = codePoints.any { UnicodeConstants.isVariationSelector(it) }
-
-        // Check for skin tone modifier
-        val hasSkinTone = codePoints.any { UnicodeConstants.isSkinToneModifier(it) }
+        // Check for variation selector and skin tone modifier
+        var hasVariationSelector = false
+        var hasSkinTone = false
+        for (i in 0 until count) {
+            val cp = buffer[i]
+            if (UnicodeConstants.isVariationSelector(cp)) hasVariationSelector = true
+            if (UnicodeConstants.isSkinToneModifier(cp)) hasSkinTone = true
+        }
 
         // For emoji with variation selector or skin tone, calculate base emoji width only
         if (hasVariationSelector || hasSkinTone) {
             // Get the first (base) code point width
-            val baseCodePoint = codePoints.first()
+            val baseCodePoint = buffer[0]
             val baseWidth = CharUtils.mk_wcwidth(baseCodePoint, ambiguousIsDWC)
 
             // Emoji are typically width 2
@@ -228,7 +361,7 @@ object GraphemeUtils {
 
         // Check for single emoji with Emoji_Presentation=Yes (e.g., ✅, ⭐)
         // These should be 2 cells even without variation selector
-        if (codePoints.size == 1 && isEmojiPresentation(codePoints.first())) {
+        if (count == 1 && isEmojiPresentation(buffer[0])) {
             return 2
         }
 
@@ -236,7 +369,8 @@ object GraphemeUtils {
         var totalWidth = 0
         var isFirst = true
 
-        for (codePoint in codePoints) {
+        for (i in 0 until count) {
+            val codePoint = buffer[i]
             val width = CharUtils.mk_wcwidth(codePoint, ambiguousIsDWC)
 
             if (isFirst) {
@@ -254,6 +388,25 @@ object GraphemeUtils {
         }
 
         return totalWidth
+    }
+
+    /**
+     * Extracts code points from a string into a pre-allocated buffer.
+     * Returns the number of code points extracted.
+     *
+     * @param grapheme The string to extract code points from
+     * @param buffer The buffer to fill with code points
+     * @return Number of code points extracted
+     */
+    private fun extractCodePoints(grapheme: String, buffer: IntArray): Int {
+        var count = 0
+        var offset = 0
+        while (offset < grapheme.length && count < buffer.size) {
+            val codePoint = grapheme.codePointAt(offset)
+            buffer[count++] = codePoint
+            offset += Character.charCount(codePoint)
+        }
+        return count
     }
 
     /**
@@ -297,23 +450,4 @@ object GraphemeUtils {
         }
     }
 
-    /**
-     * Simple LRU cache implementation for grapheme width caching.
-     */
-    private class LRUCache<K, V>(private val capacity: Int) {
-        private val cache = object : LinkedHashMap<K, V>(capacity, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>?): Boolean {
-                return size > capacity
-            }
-        }
-        private val lock = Any()
-
-        operator fun get(key: K): V? = synchronized(lock) {
-            cache[key]
-        }
-
-        operator fun set(key: K, value: V) = synchronized(lock) {
-            cache[key] = value
-        }
-    }
 }

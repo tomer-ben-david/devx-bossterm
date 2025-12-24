@@ -23,6 +23,7 @@ import ai.rever.bossterm.terminal.model.image.ImageCell
 import ai.rever.bossterm.terminal.model.image.ImageDataCache
 import ai.rever.bossterm.terminal.util.CharUtils
 import ai.rever.bossterm.terminal.util.ColumnConversionUtils
+import ai.rever.bossterm.terminal.util.GraphemeUtils
 import ai.rever.bossterm.terminal.util.UnicodeConstants
 import ai.rever.bossterm.terminal.TextStyle as BossTextStyle
 import org.jetbrains.skia.FontMgr
@@ -260,6 +261,30 @@ object TerminalCanvasRenderer {
         }
     }
     private val measurementCacheLock = Any()
+
+    /**
+     * ThreadLocal StringBuilder for emoji+variation selector concatenation.
+     * Avoids allocating new strings in the hot rendering path (issue #143).
+     */
+    private val emojiVsBuilder = ThreadLocal.withInitial { StringBuilder(8) }
+
+    /**
+     * ThreadLocal StringBuilder for ZWJ sequence text extraction.
+     * Avoids allocating new strings when checking for ZWJ sequences (issue #143).
+     */
+    private val zwjCheckBuilder = ThreadLocal.withInitial { StringBuilder(40) }
+
+    /**
+     * Builds emoji text with variation selector using ThreadLocal StringBuilder.
+     * Avoids string concatenation allocation in hot path.
+     */
+    private fun buildEmojiWithVS(base: String, vs: Char): String {
+        val builder = emojiVsBuilder.get()
+        builder.setLength(0)
+        builder.append(base)
+        builder.append(vs)
+        return builder.toString()
+    }
 
     /**
      * Clear the measurement cache. Should be called when font size or font family changes.
@@ -582,26 +607,30 @@ object TerminalCanvasRenderer {
                     continue
                 }
 
-                // Check for ZWJ sequences
-                val cleanText = buildString {
+                // Check for ZWJ sequences using ThreadLocal builder (issue #143 optimization)
+                val builder = zwjCheckBuilder.get()
+                builder.setLength(0)
+                run {
                     var i = col
                     var count = 0
                     while (i < snapshot.width && count < 20) {
                         val c = line.charAt(i)
                         if (c != CharUtils.DWC) {
-                            append(c)
+                            builder.append(c)
                             count++
                         }
                         i++
                     }
                 }
+                val cleanText = builder.toString()
 
-                val hasZWJ = cleanText.contains('\u200D')
+                // Use fast-path detection functions (issue #143 optimization)
+                val hasZWJ = GraphemeUtils.containsZWJ(cleanText)
                 val hasSkinTone = checkFollowingSkinTone(line, col, snapshot.width)
                 val hasRegionalIndicator = checkRegionalIndicatorSequence(line, col, snapshot.width) > 0
 
                 if (hasZWJ || hasSkinTone || hasRegionalIndicator) {
-                    val graphemes = ai.rever.bossterm.terminal.util.GraphemeUtils.segmentIntoGraphemes(cleanText)
+                    val graphemes = GraphemeUtils.segmentIntoGraphemes(cleanText)
                     if (graphemes.isNotEmpty()) {
                         val grapheme = graphemes[0]
                         if (grapheme.hasZWJ || hasSkinTone || hasRegionalIndicator) {
@@ -1244,9 +1273,10 @@ object TerminalCanvasRenderer {
 
         if (isDoubleWidth) {
             // Include variation selector for emoji presentation (⚠️ needs FE0F to render as color emoji)
+            // Uses ThreadLocal StringBuilder to avoid allocation (issue #143)
             val textToRender = if (isEmojiWithVariationSelector && nextChar != null &&
                 UnicodeConstants.isVariationSelector(nextChar)) {
-                "$charTextToRender$nextChar"
+                buildEmojiWithVS(charTextToRender, nextChar)
             } else {
                 charTextToRender
             }
@@ -1276,8 +1306,9 @@ object TerminalCanvasRenderer {
                 )
             }
         } else if (isEmojiOrWideSymbol) {
+            // Uses ThreadLocal StringBuilder to avoid allocation (issue #143)
             val textToRender = if (isEmojiWithVariationSelector && nextChar != null) {
-                "$charTextToRender$nextChar"
+                buildEmojiWithVS(charTextToRender, nextChar)
             } else {
                 charTextToRender
             }

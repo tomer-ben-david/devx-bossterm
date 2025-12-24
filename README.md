@@ -11,66 +11,53 @@ BossTerm is a high-performance terminal emulator designed for developers who wan
 
 ## Performance
 
-BossTerm delivers **industry-leading throughput** for developer workflows. Benchmarked against iTerm2, Terminal.app, and Alacritty (December 2025):
+BossTerm delivers **industry-leading throughput** for developer workflows. Benchmarked against iTerm2, Terminal.app, and Alacritty (December 2025, **Latency Mode**):
 
-### Throughput @ 10MB (MB/s) - Higher is Better
+### Raw Throughput @ 50MB (MB/s) - Higher is Better
 ```
-BossTerm   ████████████████████████████████████████████████████ 1,308 MB/s
-Terminal   ████████████████████████████████████████████         1,092 MB/s
-Alacritty  ███████████████████████████                            676 MB/s
-iTerm2     ██████████████████████████                             665 MB/s
-```
-
-### Line Throughput @ 10K lines (lines/sec) - Higher is Better
-```
-BossTerm   ████████████████████████████████████████████████████  4.19M ✓
-iTerm2     ███████████████████████████████████                   2.85M
-Alacritty  ██████████████████████████████████                    2.78M
-Terminal   ████████████████████████████████                      2.48M
+BossTerm   ████████████████████████████████████████████████████ 1,645 MB/s ✓
+Alacritty  ██████████████████████████████████████████████████   1,633 MB/s
+iTerm2     █████████████████████████████████████████████████    1,599 MB/s
+Terminal   ████████████████████████████████████████████████     1,491 MB/s
 ```
 
-### Command Latency - 10 Sequential Commands (ms) - Lower is Better
+### Raw Throughput @ 1MB (MB/s) - Higher is Better
 ```
-BossTerm   █████████████████████                                  18.2 ms ✓
-iTerm2     ███████████████████████████████████                    34.0 ms
+BossTerm   ████████████████████████████████████████████████████  364 MB/s ✓
+iTerm2     ███████████████████████████████████                   255 MB/s
+Terminal   ██████████████████████████████████                    249 MB/s
+Alacritty  █████████████████████████████████                     233 MB/s
 ```
 
-### Real-World Developer Workflows (ms) - Lower is Better
+### Variation Selectors (chars/sec) - Higher is Better
 ```
-Vim-like Editor:
-BossTerm   ██████████████                                         2.82 ms ✓
-Terminal   █████████████████                                      3.52 ms
-Alacritty  ███████████████████                                    3.89 ms
-iTerm2     ████████████████████                                   4.11 ms
+BossTerm   ████████████████████████████████████████████████████  1.01M ✓
+iTerm2     █████████████████████████████████████████████████     904K
+Terminal   ████████████████████████████████████████████████      879K
+Alacritty  █████████████████████████████████████████████         829K
+```
 
-Compiler Output:
-BossTerm   ███████████████                                        3.16 ms ✓
-Terminal   █████████████████                                      3.44 ms
-iTerm2     ███████████████████                                    3.90 ms
-Alacritty  ██████████████████████                                 4.40 ms
-
-Git Diff:
-BossTerm   ███████████████                                        3.09 ms ✓
-Terminal   ██████████████████                                     3.62 ms
-Alacritty  ███████████████████                                    3.87 ms
-iTerm2     ████████████████████                                   4.15 ms
+### htop Simulation (ms) - Lower is Better
+```
+BossTerm   ████████████████████████████████████████████████      3.09 ms ✓
+Terminal   █████████████████████████████████████████████████████ 3.21 ms
+iTerm2     ██████████████████████████████████████████████████████ 3.55 ms
+Alacritty  ███████████████████████████████████████████████████████ 3.72 ms
 ```
 
 | Benchmark | BossTerm vs iTerm2 |
 |-----------|-------------------|
-| Command Latency (10 seq) | **47% faster** |
-| Raw Throughput (10MB) | **2x faster** |
-| Line Throughput (10K) | **47% faster** |
-| Vim-like Rendering | **46% faster** |
-| Compiler Output | **23% faster** |
-| Git Diff | **34% faster** |
-| Log Output | **34% faster** |
-| Powerline Symbols | **36% faster** |
-| Box Drawing | **25% faster** |
-| ANSI 256 Colors | **44% faster** |
-| ANSI 16 Colors | **27% faster** |
+| Raw Throughput (1MB) | **+43% faster** |
+| Raw Throughput (5MB) | **+24% faster** |
+| Raw Throughput (50MB) | **+3% faster** |
+| Variation Selectors | **+12% faster** |
+| CJK Characters | **+10% faster** |
+| Powerline | **+10% faster** |
+| htop Simulation | **+13% faster** |
+| Git Diff Simulation | **+5% faster** |
+| Flags Emoji | **+3% faster** |
 
-> **Full benchmark details:** [benchmark/README.md](benchmark/README.md) | [Detailed Results](benchmark/benchmark_results/BENCHMARK_SUMMARY.md)
+> **Full benchmark details:** [benchmark/README.md](benchmark/README.md) | [Detailed Results](benchmark_results/BENCHMARK_SUMMARY.md)
 
 ## Installation
 

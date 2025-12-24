@@ -1476,14 +1476,33 @@ def run_benchmarks(terminal: str, benchmark_names: List[str], runs: int) -> Benc
     return suite
 
 
+def clean_old_results(output_dir: Path):
+    """Delete all old benchmark result files from output directory"""
+    if not output_dir.exists():
+        return
+
+    patterns = ["*_comprehensive_*.md", "*_comprehensive_*.json", "comparison_*.md", "BENCHMARK_SUMMARY.md"]
+    deleted = 0
+    for pattern in patterns:
+        for f in output_dir.glob(pattern):
+            try:
+                f.unlink()
+                deleted += 1
+            except Exception as e:
+                print(f"Warning: Could not delete {f}: {e}")
+
+    if deleted > 0:
+        print(f"Cleaned up {deleted} old benchmark file(s)")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Comprehensive Terminal Benchmark Suite v2.0")
     parser.add_argument("--terminal", "-t", default="all",
                         help="Terminals to benchmark (comma-separated or 'all')")
     parser.add_argument("--benchmark", "-b", default="all",
                         help="Benchmarks to run (comma-separated, category name, or 'all')")
-    parser.add_argument("--output", "-o", default="./benchmark_results",
-                        help="Output directory")
+    parser.add_argument("--output", "-o", default="../benchmark_results",
+                        help="Output directory (default: ../benchmark_results)")
     parser.add_argument("--runs", "-r", type=int, default=5,
                         help="Number of runs per test")
     parser.add_argument("--json", action="store_true",
@@ -1492,6 +1511,8 @@ def main():
                         help="Generate comparison report")
     parser.add_argument("--list", action="store_true",
                         help="List available benchmarks")
+    parser.add_argument("--no-clean", action="store_true",
+                        help="Don't delete old benchmark results before running")
 
     args = parser.parse_args()
 
@@ -1541,6 +1562,10 @@ def main():
 
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clean old results unless --no-clean is specified
+    if not args.no_clean:
+        clean_old_results(output_dir)
 
     suites = []
     for terminal in terminals:
