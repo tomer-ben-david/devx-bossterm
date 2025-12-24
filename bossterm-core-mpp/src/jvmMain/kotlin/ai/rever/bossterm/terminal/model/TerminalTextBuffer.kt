@@ -765,27 +765,31 @@ class TerminalTextBuffer internal constructor(
   }
 
   private fun addLinesToHistory(linesToAdd: List<TerminalLine>) {
-    // If size of the buffer exceeds the limit in a result of adding new lines,
-    // collect the lines we have to discard.
-    val linesToDiscard = if (historyLinesStorage.size + linesToAdd.size > maxHistoryLinesCount) {
-      val discardedLinesCount = historyLinesStorage.size + linesToAdd.size - maxHistoryLinesCount
-      if (discardedLinesCount == 1) {
-        val line = if (historyLinesStorage.size > 0) historyLinesStorage[0] else linesToAdd[0]
-        listOf(line)
-      }
-      else {
-        val linesToDiscard = ArrayList<TerminalLine>(discardedLinesCount)
-        val countOfLinesFromHistory = min(discardedLinesCount, historyLinesStorage.size)
-        for (ind in 0 until countOfLinesFromHistory) {
-          linesToDiscard.add(historyLinesStorage[ind])
-        }
-        if (countOfLinesFromHistory < discardedLinesCount) {
-          linesToDiscard.addAll(linesToAdd.subList(0, discardedLinesCount - countOfLinesFromHistory))
-        }
-        linesToDiscard
-      }
+    val totalAfterAdd = historyLinesStorage.size + linesToAdd.size
+
+    // Fast path: no lines need to be discarded (most common case)
+    if (totalAfterAdd <= maxHistoryLinesCount) {
+      historyLinesStorage.addAllToBottom(linesToAdd)
+      return
     }
-    else emptyList()
+
+    // Slow path: collect lines we have to discard before adding new ones
+    val discardedLinesCount = totalAfterAdd - maxHistoryLinesCount
+    val linesToDiscard = if (discardedLinesCount == 1) {
+      val line = if (historyLinesStorage.size > 0) historyLinesStorage[0] else linesToAdd[0]
+      listOf(line)
+    }
+    else {
+      val linesToDiscard = ArrayList<TerminalLine>(discardedLinesCount)
+      val countOfLinesFromHistory = min(discardedLinesCount, historyLinesStorage.size)
+      for (ind in 0 until countOfLinesFromHistory) {
+        linesToDiscard.add(historyLinesStorage[ind])
+      }
+      if (countOfLinesFromHistory < discardedLinesCount) {
+        linesToDiscard.addAll(linesToAdd.subList(0, discardedLinesCount - countOfLinesFromHistory))
+      }
+      linesToDiscard
+    }
 
     historyLinesStorage.addAllToBottom(linesToAdd)
 

@@ -26,6 +26,12 @@ class BlockingTerminalDataStream : TerminalDataStream {
     private val pushBackStack = mutableListOf<Char>()
 
     /**
+     * Reusable StringBuilder for readNonControlCharacters to avoid allocation per call.
+     * Pre-sized to 256 for typical read sizes.
+     */
+    private val readBuilder = StringBuilder(256)
+
+    /**
      * Buffer for incomplete grapheme clusters at chunk boundaries.
      * When a chunk ends mid-grapheme (e.g., high surrogate without low surrogate,
      * emoji without variation selector), the incomplete part is stored here
@@ -156,7 +162,8 @@ class BlockingTerminalDataStream : TerminalDataStream {
     }
 
     override fun readNonControlCharacters(maxChars: Int): String {
-        val result = StringBuilder()
+        // Reuse StringBuilder to avoid allocation per call
+        readBuilder.setLength(0)
         var count = 0
 
         while (count < maxChars) {
@@ -167,7 +174,7 @@ class BlockingTerminalDataStream : TerminalDataStream {
                     pushChar(c)
                     break
                 }
-                result.append(c)
+                readBuilder.append(c)
                 count++
                 continue
             }
@@ -187,7 +194,7 @@ class BlockingTerminalDataStream : TerminalDataStream {
                 if (c < ' ' || c == 0x7F.toChar()) {
                     break // Stop at control character
                 }
-                result.append(c)
+                readBuilder.append(c)
                 position++
                 count++
             } else {
@@ -195,7 +202,7 @@ class BlockingTerminalDataStream : TerminalDataStream {
             }
         }
 
-        return result.toString()
+        return readBuilder.toString()
     }
 
     override fun pushBackBuffer(bytes: CharArray?, length: Int) {

@@ -50,6 +50,25 @@ interface LinesStorage : Iterable<TerminalLine> {
 
   fun clear()
 
+  /**
+   * Inserts a line at the given index, shifting subsequent lines down.
+   * More efficient than removeFromTop/addToTop pattern for targeted insertions.
+   *
+   * @param index Position to insert at (0-based)
+   * @param line The line to insert
+   * @throws IndexOutOfBoundsException if index < 0 or index > size
+   */
+  fun insertAt(index: Int, line: TerminalLine)
+
+  /**
+   * Removes and returns the line at the given index, shifting subsequent lines up.
+   *
+   * @param index Position to remove from (0-based)
+   * @return The removed line
+   * @throws IndexOutOfBoundsException if index < 0 or index >= size
+   */
+  fun removeAt(index: Int): TerminalLine
+
   companion object {
     const val DEFAULT_MAX_LINES_COUNT: Int = 5000
   }
@@ -128,46 +147,63 @@ fun LinesStorage.processLines(yStart: Int, count: Int, consumer: StyledTextConsu
  * Performs a cyclic shift:
  * adds [count] of lines at the position [y], then removes [count] of lines from the end of [y, lastLine] range.
  *
+ * Optimized to use direct index operations instead of multiple list shuffles.
+ * Before: O(m + n + count) where m = lines before y, n = lines after lastLine
+ * After: O(count) direct index operations
+ *
  * @param y        index of the insertion point, the operation does not affect all lines before this line.
  * @param count    number of lines to insert.
  * @param lastLine the operation does not affect all lines after this line.
  */
 fun LinesStorage.insertLines(y: Int, count: Int, lastLine: Int, filler: TerminalLine.TextEntry) {
-  val tailLinesCount = size - lastLine - 1
-  val tail = if (tailLinesCount > 0) removeFromBottom(tailLinesCount) else emptyList()
+  if (count <= 0) return
 
-  val head = if (y > 0) removeFromTop(y) else emptyList()
-
-  for (i in 0 until count) {
-    addToTop(TerminalLine(filler))
+  // First, remove count lines from the end of the scroll region (they scroll off)
+  repeat(count) {
+    val removeIndex = lastLine.coerceAtMost(size - 1)
+    if (removeIndex >= y && size > 0) {
+      removeAt(removeIndex)
+    }
   }
-  addAllToTop(head)
-  removeFromBottom(count)
-  addAllToBottom(tail)
+
+  // Then, insert count blank lines at position y
+  repeat(count) {
+    insertAt(y, TerminalLine(filler))
+  }
 }
 
 /**
  * Performs a cyclic shift:
  * removes [count] of lines after the position [y], then adds [count] of lines after the [lastLine].
  *
+ * Optimized to use direct index operations instead of multiple list shuffles.
+ * Before: O(m + n + count) where m = lines before y, n = lines after lastLine
+ * After: O(count) direct index operations
+ *
  * @param y        first index if the line to delete, the operation does not affect all lines before this line.
  * @param count    number of lines to delete.
  * @param lastLine the operation does not affect all lines after this line.
  */
 fun LinesStorage.deleteLines(y: Int, count: Int, lastLine: Int, filler: TerminalLine.TextEntry): List<TerminalLine> {
-  val tailLinesCount: Int = size - lastLine - 1
-  val tail = if (tailLinesCount > 0) removeFromBottom(tailLinesCount) else emptyList()
+  if (count <= 0) return emptyList()
 
-  val head = if (y > 0) removeFromTop(y) else emptyList()
+  val removed = mutableListOf<TerminalLine>()
 
-  val removed: List<TerminalLine> = removeFromTop(count)
-  addAllToTop(head)
-
-  repeat(removed.size) {
-    addToBottom(TerminalLine(filler))
+  // Remove count lines starting at position y
+  repeat(count) {
+    if (y < size && y <= lastLine) {
+      removed.add(removeAt(y))
+    }
   }
 
-  addAllToBottom(tail)
+  // Insert count blank lines at the end of the scroll region
+  // The insert position is (lastLine - count + 1) since we've already removed lines
+  val actualRemoved = removed.size
+  repeat(actualRemoved) { i ->
+    val insertIndex = (lastLine - count + 1 + i).coerceIn(0, size)
+    insertAt(insertIndex, TerminalLine(filler))
+  }
+
   return removed
 }
 

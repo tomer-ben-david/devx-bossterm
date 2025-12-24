@@ -65,5 +65,30 @@ internal class CyclicBufferLinesStorage(private val maxCapacity: Int) : LinesSto
   /** O(size) */
   override fun clear() = lines.clear()
 
+  /**
+   * O(min(index, size-index)) using ArrayDeque's efficient index operations.
+   * If at capacity, removes from end first to make room.
+   */
+  override fun insertAt(index: Int, line: TerminalLine) {
+    if (index < 0 || index > lines.size) {
+      throw IndexOutOfBoundsException("Index: $index, Size: ${lines.size}")
+    }
+    if (isCapacityLimited && lines.size == maxCapacity) {
+      lines.removeLast()  // Make room by removing from end
+    }
+    // ArrayDeque implements MutableList, so add(index, element) is available
+    (lines as MutableList<TerminalLine>).add(index, line)
+  }
+
+  /**
+   * O(min(index, size-index)) using ArrayDeque's efficient index operations.
+   */
+  override fun removeAt(index: Int): TerminalLine {
+    if (index < 0 || index >= lines.size) {
+      throw IndexOutOfBoundsException("Index: $index, Size: ${lines.size}")
+    }
+    return (lines as MutableList<TerminalLine>).removeAt(index)
+  }
+
   override fun iterator(): Iterator<TerminalLine> = lines.iterator()
 }
