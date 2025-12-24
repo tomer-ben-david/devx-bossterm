@@ -38,6 +38,15 @@ import ai.rever.bossterm.compose.ui.ProperTerminal
  * )
  * ```
  *
+ * With external state (survives recomposition):
+ * ```kotlin
+ * val state = rememberTabbedTerminalState(autoDispose = false)
+ * TabbedTerminal(
+ *     state = state,
+ *     onExit = { exitApplication() }
+ * )
+ * ```
+ *
  * With callbacks:
  * ```kotlin
  * TabbedTerminal(
@@ -47,6 +56,9 @@ import ai.rever.bossterm.compose.ui.ProperTerminal
  * )
  * ```
  *
+ * @param state Optional external state holder. When provided, the terminal state survives
+ *              recomposition (e.g., when embedded in a tab system). When null, state is
+ *              managed internally and lost when composable unmounts.
  * @param onExit Called when the last tab is closed
  * @param onWindowTitleChange Called when active tab's title changes (for window title bar)
  * @param onNewWindow Called when user requests a new window (Cmd/Ctrl+N)
@@ -57,6 +69,7 @@ import ai.rever.bossterm.compose.ui.ProperTerminal
  */
 @Composable
 fun TabbedTerminal(
+    state: TabbedTerminalState? = null,
     onExit: () -> Unit,
     onWindowTitleChange: (String) -> Unit = {},
     onNewWindow: () -> Unit = {},
@@ -75,8 +88,17 @@ fun TabbedTerminal(
         loadTerminalFont(settings.fontName)
     }
 
-    // Create tab controller with window focus tracking for notifications
-    val tabController = remember {
+    // Initialize external state if provided (only once)
+    if (state != null && !state.isInitialized) {
+        state.initialize(
+            settings = settings,
+            onLastTabClosed = onExit,
+            isWindowFocused = isWindowFocused
+        )
+    }
+
+    // Use external state's tabController if provided, otherwise create internal one
+    val tabController = state?.tabController ?: remember {
         TabController(
             settings = settings,
             onLastTabClosed = onExit,
@@ -209,13 +231,17 @@ fun TabbedTerminal(
         splitStates.keys.removeAll { it !in currentTabIds }
     }
 
-    // Cleanup all tabs when window is closed
+    // Cleanup when composable is disposed
+    // Only dispose internal tabController - external state manages its own lifecycle
     DisposableEffect(tabController) {
         onDispose {
             // Dispose all split states
             splitStates.values.forEach { it.dispose() }
             splitStates.clear()
-            tabController.disposeAll()
+            // Only dispose if using internal state (not external TabbedTerminalState)
+            if (state == null) {
+                tabController.disposeAll()
+            }
         }
     }
 
