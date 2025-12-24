@@ -107,34 +107,100 @@ data class GraphemeCluster(
 
     companion object {
         /**
+         * Pre-cached GraphemeCluster objects for ASCII characters (0-127).
+         * Avoids allocation for the most common case in terminal output.
+         * All ASCII characters have width 1 (except control characters which are typically not displayed).
+         */
+        private val ASCII_CLUSTERS: Array<GraphemeCluster> = Array(128) { code ->
+            val c = code.toChar()
+            GraphemeCluster(
+                text = c.toString(),
+                visualWidth = if (code < 32 || code == 127) 0 else 1,  // Control chars have width 0
+                codePoints = intArrayOf(code)
+            )
+        }
+
+        /**
          * Creates a GraphemeCluster from a single character.
-         * Fast path for simple ASCII characters.
+         * Fast path for ASCII characters uses pre-cached objects.
          */
         fun fromChar(c: Char, width: Int): GraphemeCluster {
+            val code = c.code
+            // Fast path: use cached ASCII cluster if width matches
+            if (code < 128) {
+                val cached = ASCII_CLUSTERS[code]
+                if (cached.visualWidth == width) return cached
+            }
+            // Fallback: create new cluster
             return GraphemeCluster(
                 text = c.toString(),
                 visualWidth = width,
-                codePoints = intArrayOf(c.code)
+                codePoints = intArrayOf(code)
             )
         }
 
         /**
          * Creates a GraphemeCluster from a string and calculated width.
-         * Extracts code points from the string.
+         * Fast path for single ASCII character uses pre-cached objects.
+         * Extracts code points from the string for other cases.
          */
         fun fromString(text: String, width: Int): GraphemeCluster {
-            val codePoints = mutableListOf<Int>()
+            // Fast path: single ASCII character
+            if (text.length == 1) {
+                val code = text[0].code
+                if (code < 128) {
+                    val cached = ASCII_CLUSTERS[code]
+                    if (cached.visualWidth == width) return cached
+                }
+            }
+
+            // Full construction for complex graphemes
+            val codePoints = extractCodePoints(text)
+            return GraphemeCluster(
+                text = text,
+                visualWidth = width,
+                codePoints = codePoints
+            )
+        }
+
+        /**
+         * Thread-local buffer for code point extraction.
+         */
+        private val codePointBuffer: ThreadLocal<IntArray> = ThreadLocal.withInitial {
+            IntArray(16)
+        }
+
+        /**
+         * Extracts code points from a string, using ThreadLocal buffer when possible.
+         */
+        private fun extractCodePoints(text: String): IntArray {
+            if (text.isEmpty()) return IntArray(0)
+
+            // Estimate code point count (chars / 1.5 is a reasonable estimate)
+            val buffer = codePointBuffer.get()
+            var count = 0
             var offset = 0
+
+            while (offset < text.length && count < buffer.size) {
+                val codePoint = text.codePointAt(offset)
+                buffer[count++] = codePoint
+                offset += Character.charCount(codePoint)
+            }
+
+            // If we fit in buffer, copy out
+            if (offset >= text.length) {
+                return buffer.copyOf(count)
+            }
+
+            // Otherwise, fall back to full extraction with larger array
+            val codePoints = mutableListOf<Int>()
+            offset = 0
             while (offset < text.length) {
                 val codePoint = text.codePointAt(offset)
                 codePoints.add(codePoint)
                 offset += Character.charCount(codePoint)
             }
-            return GraphemeCluster(
-                text = text,
-                visualWidth = width,
-                codePoints = codePoints.toIntArray()
-            )
+            return codePoints.toIntArray()
         }
     }
 }
