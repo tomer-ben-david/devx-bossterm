@@ -231,9 +231,10 @@ fun TabbedTerminal(
         splitStates.keys.removeAll { it !in currentTabIds }
     }
 
-    // Cleanup when composable is disposed
-    // Only dispose internal tabController - external state manages its own lifecycle
-    DisposableEffect(tabController) {
+    // Cleanup when composable is disposed or state changes
+    // Adding 'state' to keys ensures split states are cleaned up if state.dispose() is called
+    // while composable is still mounted
+    DisposableEffect(tabController, state) {
         onDispose {
             // Dispose all split states
             splitStates.values.forEach { it.dispose() }
