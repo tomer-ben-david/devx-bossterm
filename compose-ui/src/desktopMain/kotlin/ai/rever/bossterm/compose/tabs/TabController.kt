@@ -1338,9 +1338,13 @@ class TabController(
      * This is used when extracting the original tab from a split - the remaining
      * session needs to take the original tab's position in the list.
      *
+     * Note: The returned old tab is NOT disposed. In the typical use case,
+     * the old tab is being moved to a new position (via createTabFromExistingSession),
+     * not deleted. Caller is responsible for managing the returned tab's lifecycle.
+     *
      * @param index The tab index to replace
      * @param newSession The session to put in that position
-     * @return The old tab that was replaced, or null if index is invalid
+     * @return The old tab that was replaced (NOT disposed), or null if index is invalid
      */
     fun replaceTabAtIndex(index: Int, newSession: TerminalSession): TerminalTab? {
         if (index !in tabs.indices) return null
