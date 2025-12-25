@@ -545,7 +545,16 @@ data class TerminalSettings(
      * When true, new splits start in the same directory as the focused pane.
      * When false, new splits start in the user's home directory.
      */
-    val splitInheritWorkingDirectory: Boolean = true
+    val splitInheritWorkingDirectory: Boolean = true,
+
+    // ===== Tab Bar Settings =====
+
+    /**
+     * Always show tab bar even with single tab.
+     * When false (default), tab bar auto-hides when only one tab is open.
+     * When true, tab bar is always visible for consistency and quick access to "+" button.
+     */
+    val alwaysShowTabBar: Boolean = false
 ) {
     // Non-serialized computed properties
 

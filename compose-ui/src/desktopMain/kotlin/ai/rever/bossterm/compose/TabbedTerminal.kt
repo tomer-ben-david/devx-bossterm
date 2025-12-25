@@ -256,8 +256,8 @@ fun TabbedTerminal(
     // Tab UI layout with focus overlay support
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Tab bar at top (only show when multiple tabs)
-            if (tabController.tabs.size > 1) {
+            // Tab bar at top (show when multiple tabs or alwaysShowTabBar setting is enabled)
+            if (tabController.tabs.size > 1 || settings.alwaysShowTabBar) {
             TabBar(
                 tabs = tabController.tabs,
                 activeTabIndex = tabController.activeTabIndex,
