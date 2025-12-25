@@ -1,5 +1,8 @@
 package ai.rever.bossterm.tabbed
 
+import ai.rever.bossterm.compose.ContextMenuItem
+import ai.rever.bossterm.compose.ContextMenuSection
+import ai.rever.bossterm.compose.ContextMenuSubmenu
 import ai.rever.bossterm.compose.TabbedTerminal
 import ai.rever.bossterm.compose.TabbedTerminalState
 import ai.rever.bossterm.compose.rememberTabbedTerminalState
@@ -30,6 +33,7 @@ import java.awt.event.WindowFocusListener
  * - Multiple windows support
  * - Window focus tracking for command notifications
  * - Menu bar integration
+ * - **Custom context menu items** (right-click to see)
  * - **State persistence across view switches** (TabbedTerminalState demo)
  *
  * Run with: ./gradlew :tabbed-example:run
@@ -178,6 +182,58 @@ private fun ApplicationScope.TabbedTerminalWindow(
                     Box(modifier = Modifier.fillMaxSize()) {
                         when (currentView) {
                             AppView.TERMINAL -> {
+                                // Custom context menu items demonstrating the contextMenuItems API
+                                val customContextMenuItems = remember {
+                                    listOf(
+                                        // Section with label
+                                        ContextMenuSection(
+                                            id = "quick_commands_section",
+                                            label = "Quick Commands"
+                                        ),
+                                        // Simple menu items
+                                        ContextMenuItem(
+                                            id = "list_files",
+                                            label = "List Files (ls -la)",
+                                            action = { terminalState.activeTab?.writeUserInput("ls -la\n") }
+                                        ),
+                                        ContextMenuItem(
+                                            id = "show_pwd",
+                                            label = "Show Directory (pwd)",
+                                            action = { terminalState.activeTab?.writeUserInput("pwd\n") }
+                                        ),
+                                        // Submenu with nested items
+                                        ContextMenuSubmenu(
+                                            id = "git_commands",
+                                            label = "Git Commands",
+                                            items = listOf(
+                                                ContextMenuItem(
+                                                    id = "git_status",
+                                                    label = "Status",
+                                                    action = { terminalState.activeTab?.writeUserInput("git status\n") }
+                                                ),
+                                                ContextMenuItem(
+                                                    id = "git_log",
+                                                    label = "Log (last 10)",
+                                                    action = { terminalState.activeTab?.writeUserInput("git log --oneline -10\n") }
+                                                ),
+                                                ContextMenuSection(id = "git_branch_section"),
+                                                ContextMenuItem(
+                                                    id = "git_branch",
+                                                    label = "List Branches",
+                                                    action = { terminalState.activeTab?.writeUserInput("git branch -a\n") }
+                                                )
+                                            )
+                                        ),
+                                        // Another section
+                                        ContextMenuSection(id = "system_section"),
+                                        ContextMenuItem(
+                                            id = "system_info",
+                                            label = "System Info (uname -a)",
+                                            action = { terminalState.activeTab?.writeUserInput("uname -a\n") }
+                                        )
+                                    )
+                                }
+
                                 // Terminal with external state - sessions persist across view switches!
                                 TabbedTerminal(
                                     state = terminalState,
@@ -187,6 +243,7 @@ private fun ApplicationScope.TabbedTerminalWindow(
                                     onShowSettings = { showSettings = true },
                                     menuActions = menuActions,
                                     isWindowFocused = { isWindowFocused },
+                                    contextMenuItems = customContextMenuItems,
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
