@@ -903,6 +903,8 @@ fun ProperTerminal(
                     e.printStackTrace()
                   }
                 }
+                // Ensure focus is on terminal canvas after middle-click paste (for split view)
+                focusRequester.requestFocus()
                 change.consume()
                 return@onPointerEvent
               }
