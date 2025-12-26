@@ -600,6 +600,11 @@ private fun configureGpuRendering() {
         println("GPU: VSync disabled")
     }
 
+    // Configure GPU resource cache limit (convert MB to bytes)
+    // Note: Skiko uses this for glyph/texture caching
+    val cacheSizeBytes = settings.gpuCacheSizeMb.coerceIn(64, 8192) * 1024L * 1024L
+    System.setProperty("skiko.gpu.resourceCacheLimit", cacheSizeBytes.toString())
+
     // Log GPU configuration summary
     println("GPU: Acceleration=${settings.gpuAcceleration}, API=${settings.gpuRenderApi}, " +
             "Priority=${settings.gpuPriority}, VSync=${settings.gpuVsyncEnabled}, Cache=${settings.gpuCacheSizeMb}MB")

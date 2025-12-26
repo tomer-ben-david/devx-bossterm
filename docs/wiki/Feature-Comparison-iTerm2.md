@@ -204,7 +204,7 @@ This document provides a comprehensive feature comparison between BossTerm and [
 | Snapshot-based rendering | ✅ | ❌ | Lock-free UI during streaming |
 | Copy-on-write buffers | ✅ | ❌ | 99.5% allocation reduction |
 | Type-ahead prediction | ✅ | ❌ | **BossTerm unique** - latency masking |
-| GPU acceleration | ❌ | ✅ | Metal rendering on macOS |
+| GPU acceleration | ✅ | ✅ | BossTerm: Skia (Metal/OpenGL/DirectX), iTerm2: Metal |
 
 ---
 
