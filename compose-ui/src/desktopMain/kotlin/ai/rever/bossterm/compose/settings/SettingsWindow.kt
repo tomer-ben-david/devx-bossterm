@@ -5,13 +5,15 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.rememberWindowState
+import kotlinx.coroutines.delay
 
 /**
  * Settings window (non-modal, allows terminal interaction).
  *
- * Uses a pending settings state for smooth slider interaction:
- * - onSettingsChange updates UI immediately (no I/O)
- * - onSettingsSave persists to disk (called on slider release)
+ * Uses debounced auto-save (100ms) for all controls:
+ * - Immediate UI feedback on every change
+ * - Disk write after 100ms of no changes (prevents excessive I/O during slider drag)
+ * - Sliders also call onSettingsSave on release for immediate persistence
  *
  * @param visible Whether the window is visible
  * @param onDismiss Called when the window should be closed
@@ -36,6 +38,15 @@ fun SettingsWindow(
         pendingSettings = savedSettings
     }
 
+    // Debounced auto-save: save 100ms after last change
+    // This makes toggles/dropdowns reactive while keeping sliders smooth
+    LaunchedEffect(pendingSettings) {
+        if (pendingSettings != savedSettings) {
+            delay(100)
+            settingsManager.updateSettings(pendingSettings)
+        }
+    }
+
     Window(
         onCloseRequest = onDismiss,
         title = "BossTerm Settings",
@@ -52,7 +63,7 @@ fun SettingsWindow(
                 pendingSettings = newSettings
             },
             onSettingsSave = {
-                // Save to disk only when slider is released
+                // Sliders call this on release - save immediately
                 settingsManager.updateSettings(pendingSettings)
             },
             onResetToDefaults = {
