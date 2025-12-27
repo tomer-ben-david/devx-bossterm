@@ -255,6 +255,9 @@ data class TerminalTab(
             } catch (e: java.io.IOException) {
                 // PTY might be closed - log but don't crash
                 // This can happen during normal tab close or if shell exits
+                if (debugEnabled.value) {
+                    println("DEBUG: PTY write failed (expected during tab close): ${e.message}")
+                }
             }
         }
     }
