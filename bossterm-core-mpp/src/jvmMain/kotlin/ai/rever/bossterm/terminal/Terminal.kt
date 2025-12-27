@@ -201,6 +201,8 @@ interface Terminal {
      * This reduces flicker for applications that send many escape sequences
      * in rapid succession (like Claude Code, vim, etc.).
      *
+     * Default implementation is a no-op for backwards compatibility.
+     *
      * @param enabled true to suspend rendering, false to resume and flush
      */
     fun setSynchronizedUpdate(enabled: Boolean) {}

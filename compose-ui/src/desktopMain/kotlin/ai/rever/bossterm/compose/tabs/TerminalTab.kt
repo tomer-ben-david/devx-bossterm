@@ -329,7 +329,12 @@ data class TerminalTab(
 
         // Send to process (non-blocking to prevent UI freeze)
         coroutineScope.launch {
-            processHandle.value?.write(text)
+            try {
+                processHandle.value?.write(text)
+            } catch (e: java.io.IOException) {
+                // PTY might be closed - log but don't crash
+                // This can happen during normal tab close or if shell exits
+            }
         }
     }
 }

@@ -95,6 +95,8 @@ class ComposeTerminalDisplay : TerminalDisplay {
     // ===== SYNCHRONIZED UPDATE MODE (DEC Private Mode 2026) =====
     // When enabled, redraws are suppressed until mode is disabled.
     // This reduces flicker for applications that send many escape sequences rapidly.
+    // Uses lock to prevent race conditions between requestRedraw() and setSynchronizedUpdate()
+    private val syncUpdateLock = Any()
     @Volatile private var _synchronizedUpdateEnabled = false
     @Volatile private var _pendingRedrawDuringSync = false
     private val _windowTitle = MutableStateFlow("")
@@ -350,9 +352,12 @@ class ComposeTerminalDisplay : TerminalDisplay {
      */
     fun requestRedraw() {
         // Synchronized Update Mode (2026): Suppress redraws while enabled
-        if (_synchronizedUpdateEnabled) {
-            _pendingRedrawDuringSync = true
-            return
+        // Uses lock to prevent race condition with setSynchronizedUpdate()
+        synchronized(syncUpdateLock) {
+            if (_synchronizedUpdateEnabled) {
+                _pendingRedrawDuringSync = true
+                return
+            }
         }
 
         val sent = redrawChannel.trySend(RedrawRequest(priority = RedrawPriority.NORMAL))
@@ -367,21 +372,27 @@ class ComposeTerminalDisplay : TerminalDisplay {
      * When enabled, redraws are suppressed until mode is disabled.
      * When disabled, if any redraws were pending, one redraw is triggered.
      *
+     * Thread-safe: Uses lock to prevent race conditions with requestRedraw().
+     *
      * @param enabled true to suppress rendering, false to resume
      */
     override fun setSynchronizedUpdate(enabled: Boolean) {
-        if (enabled) {
-            _synchronizedUpdateEnabled = true
-            _pendingRedrawDuringSync = false
-        } else {
-            val hadPendingRedraw = _pendingRedrawDuringSync
-            _synchronizedUpdateEnabled = false
-            _pendingRedrawDuringSync = false
-
-            // Flush: If there were pending redraws, trigger one now
-            if (hadPendingRedraw) {
-                requestRedraw()
+        val shouldRedraw: Boolean
+        synchronized(syncUpdateLock) {
+            if (enabled) {
+                _synchronizedUpdateEnabled = true
+                _pendingRedrawDuringSync = false
+                shouldRedraw = false
+            } else {
+                shouldRedraw = _pendingRedrawDuringSync
+                _synchronizedUpdateEnabled = false
+                _pendingRedrawDuringSync = false
             }
+        }
+
+        // Flush outside the lock to avoid potential deadlock
+        if (shouldRedraw) {
+            requestRedraw()
         }
     }
 

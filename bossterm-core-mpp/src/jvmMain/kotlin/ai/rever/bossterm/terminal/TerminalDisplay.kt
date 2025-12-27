@@ -43,6 +43,8 @@ interface TerminalDisplay {
      * When enabled, display rendering is suppressed until mode is disabled.
      * When disabled, any pending updates are flushed.
      *
+     * Default implementation is a no-op for backwards compatibility.
+     *
      * @param enabled true to suppress rendering, false to resume
      */
     fun setSynchronizedUpdate(enabled: Boolean) {}
