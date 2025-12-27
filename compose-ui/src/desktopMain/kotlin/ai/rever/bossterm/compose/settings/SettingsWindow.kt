@@ -7,6 +7,9 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
 
+/** Debounce delay for auto-saving settings changes */
+private const val SETTINGS_DEBOUNCE_MS = 100L
+
 /**
  * Settings window (non-modal, allows terminal interaction).
  *
@@ -42,11 +45,11 @@ fun SettingsWindow(
         lastSavedPending = savedSettings
     }
 
-    // Debounced auto-save: save 100ms after last change
-    // Only save if pending differs from both saved AND last saved pending (avoids race condition)
+    // Debounced auto-save: wait for 100ms of inactivity, then save final value
+    // Delay first ensures only the last value after rapid changes gets saved
     LaunchedEffect(pendingSettings) {
+        delay(SETTINGS_DEBOUNCE_MS)
         if (pendingSettings != savedSettings && pendingSettings != lastSavedPending) {
-            delay(100)
             lastSavedPending = pendingSettings
             settingsManager.updateSettings(pendingSettings)
         }

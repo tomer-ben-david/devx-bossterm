@@ -549,7 +549,6 @@ private fun configureGpuRendering() {
     val osName = System.getProperty("os.name").lowercase()
     val isMacOS = osName.contains("mac")
     val isWindows = osName.contains("windows")
-    val isLinux = osName.contains("linux")
 
     // Load settings using SettingsLoader (handles JSON parsing and defaults)
     val settings = try {
