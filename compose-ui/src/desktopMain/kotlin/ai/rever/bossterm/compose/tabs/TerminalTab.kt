@@ -358,8 +358,8 @@ data class TerminalTab(
      *
      * Uses Channel-based queue to ensure:
      * - Sequential write ordering (no race conditions)
-     * - Backpressure handling (buffer of 256)
-     * - Non-blocking UI (trySend returns immediately)
+     * - Backpressure handling (suspends if buffer full, never drops input)
+     * - Non-blocking UI (launches coroutine for send)
      *
      * @param text The text to send to the shell
      */
@@ -368,12 +368,17 @@ data class TerminalTab(
         debugCollector?.recordChunk(text, ai.rever.bossterm.compose.debug.ChunkSource.USER_INPUT)
 
         // Queue for sequential processing by writeConsumerJob
-        // trySend is non-blocking; if buffer is full or channel closed, input is dropped
-        val result = writeChannel.trySend(text)
-        if (result.isFailure) {
-            // Channel closed (tab closing) or buffer full (unlikely with capacity 256)
-            // Log but don't crash - this is expected during tab close
-            println("WARN: Failed to queue input to PTY: ${result.exceptionOrNull()?.message ?: "channel closed or full"}")
+        // Uses coroutine with send() to suspend if buffer full (never drops input)
+        // This is safe because we're launching on the tab's scope, not blocking the caller
+        coroutineScope.launch {
+            try {
+                writeChannel.send(text)  // Suspends if buffer full, doesn't drop
+            } catch (e: Exception) {
+                // Channel closed (tab closing) - expected during shutdown
+                if (debugEnabled.value) {
+                    println("DEBUG: Failed to queue input to PTY: ${e.message}")
+                }
+            }
         }
     }
 }
