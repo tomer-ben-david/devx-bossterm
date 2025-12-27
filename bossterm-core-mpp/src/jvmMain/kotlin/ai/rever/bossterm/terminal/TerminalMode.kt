@@ -92,7 +92,8 @@ enum class TerminalMode {
     },
 
     // DEC Private Mode 2026 - Synchronized Output / Update Mode
-    // https://gist.github.com/christianparpart/d8a62cc1ab659194337d73e399004036
+    // Spec: https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md
+    // Also: https://gist.github.com/christianparpart/d8a62cc1ab659194337d73e399004036
     // When enabled, terminal buffers all output and suppresses rendering.
     // When disabled, all buffered output is rendered at once (reduces flicker).
     SynchronizedUpdate {
