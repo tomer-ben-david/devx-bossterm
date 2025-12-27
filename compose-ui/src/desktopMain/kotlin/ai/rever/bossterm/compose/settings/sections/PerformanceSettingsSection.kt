@@ -286,8 +286,8 @@ private data class GpuCacheLimits(
 
 /**
  * Calculate GPU cache limits based on available system memory.
- * - Min: 64 MB (enough for basic glyph caching)
- * - Max: User-configurable % of system RAM, capped at 8 GB (no GPU has more VRAM for a terminal)
+ * - Min: GPU_CACHE_MIN_MB (enough for basic glyph caching)
+ * - Max: User-configurable % of system RAM, capped at GPU_CACHE_MAX_MB
  * - Default: 10% of system RAM, capped at 512 MB
  *
  * @param maxPercent Maximum cache as percentage of system RAM (10-90)
@@ -295,11 +295,10 @@ private data class GpuCacheLimits(
 private fun calculateGpuCacheLimits(maxPercent: Int = 75): GpuCacheLimits {
     val systemMemoryMb = SystemInfoUtils.getSystemMemoryMb()
 
-    // Calculate limits: min 256 MB, max 8 GB (8192 MB)
-    val min = 64
+    val min = SystemInfoUtils.GPU_CACHE_MIN_MB
     val maxCacheMb = (systemMemoryMb * (maxPercent / 100.0)).toInt()
         .coerceAtLeast(256)
-        .coerceAtMost(8192)  // Cap at 8 GB - no practical GPU cache needs more
+        .coerceAtMost(SystemInfoUtils.GPU_CACHE_MAX_MB)
     val default = (systemMemoryMb * 0.10).toInt().coerceIn(128, 512)
 
     return GpuCacheLimits(min = min, max = maxCacheMb, default = default, systemRamMb = systemMemoryMb)

@@ -556,6 +556,7 @@ private fun configureGpuRendering() {
         ai.rever.bossterm.compose.settings.SettingsLoader.loadFromPathOrDefault(null)
     } catch (e: Exception) {
         System.err.println("Could not load settings for GPU config, using defaults: ${e.message}")
+        e.printStackTrace()
         ai.rever.bossterm.compose.settings.TerminalSettings()
     }
 
@@ -602,8 +603,11 @@ private fun configureGpuRendering() {
 
     // Configure GPU resource cache limit (convert MB to bytes)
     // Note: Skiko uses this for glyph/texture caching
-    val cacheSizeBytes = settings.gpuCacheSizeMb.coerceIn(64, 8192) * 1024L * 1024L
-    System.setProperty("skiko.gpu.resourceCacheLimit", cacheSizeBytes.toString())
+    val cacheSizeMb = settings.gpuCacheSizeMb.coerceIn(
+        ai.rever.bossterm.compose.settings.SystemInfoUtils.GPU_CACHE_MIN_MB,
+        ai.rever.bossterm.compose.settings.SystemInfoUtils.GPU_CACHE_MAX_MB
+    )
+    System.setProperty("skiko.gpu.resourceCacheLimit", (cacheSizeMb * 1024L * 1024L).toString())
 
     // Log GPU configuration summary
     println("GPU: Acceleration=${settings.gpuAcceleration}, API=${settings.gpuRenderApi}, " +

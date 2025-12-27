@@ -33,16 +33,21 @@ fun SettingsWindow(
     // Pending settings for smooth slider interaction (no I/O during drag)
     var pendingSettings by remember { mutableStateOf(savedSettings) }
 
+    // Track last saved pending state to avoid redundant saves after external updates
+    var lastSavedPending by remember { mutableStateOf(savedSettings) }
+
     // Sync pending settings when saved settings change externally
     LaunchedEffect(savedSettings) {
         pendingSettings = savedSettings
+        lastSavedPending = savedSettings
     }
 
     // Debounced auto-save: save 100ms after last change
-    // This makes toggles/dropdowns reactive while keeping sliders smooth
+    // Only save if pending differs from both saved AND last saved pending (avoids race condition)
     LaunchedEffect(pendingSettings) {
-        if (pendingSettings != savedSettings) {
+        if (pendingSettings != savedSettings && pendingSettings != lastSavedPending) {
             delay(100)
+            lastSavedPending = pendingSettings
             settingsManager.updateSettings(pendingSettings)
         }
     }

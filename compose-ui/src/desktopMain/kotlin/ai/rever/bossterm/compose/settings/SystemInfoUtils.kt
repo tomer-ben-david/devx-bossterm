@@ -5,6 +5,12 @@ package ai.rever.bossterm.compose.settings
  */
 object SystemInfoUtils {
 
+    /** Minimum GPU cache size in MB */
+    const val GPU_CACHE_MIN_MB = 64
+
+    /** Maximum GPU cache size in MB (8 GB - no practical GPU cache needs more) */
+    const val GPU_CACHE_MAX_MB = 8192
+
     /**
      * Get total system physical memory in megabytes.
      * Uses com.sun.management.OperatingSystemMXBean when available,
@@ -19,7 +25,8 @@ object SystemInfoUtils {
         return try {
             val osBean = java.lang.management.ManagementFactory.getOperatingSystemMXBean()
             if (osBean is com.sun.management.OperatingSystemMXBean) {
-                ((osBean as com.sun.management.OperatingSystemMXBean).totalPhysicalMemorySize / (1024 * 1024)).toInt()
+                // Smart cast: osBean is already typed after is check
+                (osBean.totalPhysicalMemorySize / (1024 * 1024)).toInt()
             } else {
                 // Fallback: estimate system memory as 4x JVM max (rough heuristic)
                 maxMemoryMb * 4
