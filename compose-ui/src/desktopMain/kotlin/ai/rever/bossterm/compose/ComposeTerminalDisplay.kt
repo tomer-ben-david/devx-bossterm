@@ -372,6 +372,12 @@ class ComposeTerminalDisplay : TerminalDisplay {
      * When enabled, redraws are suppressed until mode is disabled.
      * When disabled, if any redraws were pending, one redraw is triggered.
      *
+     * Note: A single redraw is sufficient because:
+     * - TerminalTextBuffer accumulates ALL changes regardless of rendering
+     * - A "redraw" renders the entire current buffer state
+     * - One final redraw displays all accumulated changes at once
+     * - Multiple redraws would just re-render the same final state
+     *
      * Thread-safe: Uses lock to prevent race conditions with requestRedraw().
      *
      * @param enabled true to suppress rendering, false to resume
