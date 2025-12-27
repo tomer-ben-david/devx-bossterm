@@ -95,7 +95,12 @@ class ComposeTerminalDisplay : TerminalDisplay {
     // ===== SYNCHRONIZED UPDATE MODE (DEC Private Mode 2026) =====
     // When enabled, redraws are suppressed until mode is disabled.
     // This reduces flicker for applications that send many escape sequences rapidly.
-    // Uses lock to prevent race conditions between requestRedraw() and setSynchronizedUpdate()
+    //
+    // Uses synchronized() instead of Kotlin Mutex because:
+    // - requestRedraw() is NOT a suspend function (Mutex.withLock requires suspend)
+    // - Critical section is extremely short (nanoseconds) - no suspension benefit
+    // - High-frequency calls need low overhead - synchronized is JVM-optimized
+    // - Converting to Mutex would require making requestRedraw() suspend (breaking change)
     private val syncUpdateLock = Any()
     @Volatile private var _synchronizedUpdateEnabled = false
     @Volatile private var _pendingRedrawDuringSync = false
