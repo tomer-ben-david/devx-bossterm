@@ -365,8 +365,13 @@ data class TerminalTab(
         debugCollector?.recordChunk(text, ai.rever.bossterm.compose.debug.ChunkSource.USER_INPUT)
 
         // Queue for sequential processing by writeConsumerJob
-        // trySend is non-blocking; if buffer is full, input is dropped (unlikely with capacity 256)
-        writeChannel.trySend(text)
+        // trySend is non-blocking; if buffer is full or channel closed, input is dropped
+        val result = writeChannel.trySend(text)
+        if (result.isFailure) {
+            // Channel closed (tab closing) or buffer full (unlikely with capacity 256)
+            // Log but don't crash - this is expected during tab close
+            println("WARN: Failed to queue input to PTY: ${result.exceptionOrNull()?.message ?: "channel closed or full"}")
+        }
     }
 }
 
