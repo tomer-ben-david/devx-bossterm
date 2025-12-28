@@ -57,6 +57,8 @@ fun TabbedTerminal(
     isWindowFocused: () -> Boolean = { true },
     initialCommand: String? = null,
     onLinkClick: ((String) -> Unit)? = null,
+    contextMenuItems: List<ContextMenuElement> = emptyList(),
+    settingsOverride: TerminalSettingsOverride? = null,
     modifier: Modifier = Modifier
 )
 ```
@@ -73,6 +75,7 @@ fun TabbedTerminal(
 | `initialCommand` | `String?` | Command to run in first tab after startup |
 | `onLinkClick` | `(String) -> Unit` | Custom link click handler (see [Custom Link Handling](#custom-link-handling)) |
 | `contextMenuItems` | `List<ContextMenuElement>` | Custom context menu items (see [Custom Context Menu](#custom-context-menu)) |
+| `settingsOverride` | `TerminalSettingsOverride?` | Per-instance settings overrides (see [Settings Override](#settings-override)) |
 | `modifier` | `Modifier` | Compose modifier |
 
 ### MenuActions
@@ -307,6 +310,67 @@ Run a command when the terminal starts:
 TabbedTerminal(
     onExit = { /* ... */ },
     initialCommand = "echo 'Welcome!' && ls -la"
+)
+```
+
+## Settings Override
+
+Override specific global settings for a particular `TabbedTerminal` instance without affecting other instances or the global settings file.
+
+```kotlin
+import ai.rever.bossterm.compose.settings.TerminalSettingsOverride
+
+TabbedTerminal(
+    onExit = { /* ... */ },
+    settingsOverride = TerminalSettingsOverride(
+        alwaysShowTabBar = true,  // Always show tab bar (useful for sidebars)
+        fontSize = 12f            // Smaller font for compact view
+    )
+)
+```
+
+### Use Cases
+
+- **Sidebar terminals**: Force `alwaysShowTabBar = true` so users always see tabs
+- **Compact views**: Reduce `fontSize` for space-constrained layouts
+- **Different themes per instance**: Override colors for specific terminals
+- **Performance tuning**: Different `bufferMaxLines` for different use cases
+
+### How It Works
+
+`settingsOverride` merges with global settings from `~/.bossterm/settings.json`:
+
+1. Global settings are loaded from `SettingsManager`
+2. Non-null fields in `settingsOverride` replace corresponding global values
+3. Null fields in `settingsOverride` inherit from global settings
+
+```kotlin
+// Example: Only override alwaysShowTabBar, inherit everything else
+TabbedTerminal(
+    settingsOverride = TerminalSettingsOverride(
+        alwaysShowTabBar = true
+    ),
+    onExit = { /* ... */ }
+)
+```
+
+### Common Override Examples
+
+```kotlin
+// Always show tab bar (for sidebar integration)
+TerminalSettingsOverride(alwaysShowTabBar = true)
+
+// Compact terminal
+TerminalSettingsOverride(
+    fontSize = 11f,
+    lineSpacing = 1.0f,
+    showScrollbar = false
+)
+
+// Different split behavior
+TerminalSettingsOverride(
+    splitDefaultRatio = 0.3f,  // 30/70 splits
+    splitFocusBorderEnabled = false
 )
 ```
 

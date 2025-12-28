@@ -12,6 +12,8 @@ import ai.rever.bossterm.compose.ContextMenuElement
 import ai.rever.bossterm.compose.menu.MenuActions
 import ai.rever.bossterm.compose.util.loadTerminalFont
 import ai.rever.bossterm.compose.settings.SettingsManager
+import ai.rever.bossterm.compose.settings.TerminalSettingsOverride
+import ai.rever.bossterm.compose.settings.withOverrides
 import ai.rever.bossterm.compose.splits.NavigationDirection
 import ai.rever.bossterm.compose.splits.SplitContainer
 import ai.rever.bossterm.compose.splits.SplitOrientation
@@ -71,6 +73,8 @@ import ai.rever.bossterm.compose.ui.ProperTerminal
  *                    on links and context menu "Open Link" action. When null, links open in system browser.
  * @param contextMenuItems Custom context menu items to add below the built-in items (Copy, Paste, Clear, Select All).
  *                         Applies to all tabs and split panes within the terminal.
+ * @param settingsOverride Per-instance settings overrides. Non-null fields override global settings.
+ *                         Example: `TerminalSettingsOverride(alwaysShowTabBar = true)` to always show tab bar.
  * @param modifier Compose modifier for the terminal container
  */
 @Composable
@@ -86,11 +90,17 @@ fun TabbedTerminal(
     workingDirectory: String? = null,
     onLinkClick: ((String) -> Unit)? = null,
     contextMenuItems: List<ContextMenuElement> = emptyList(),
+    settingsOverride: TerminalSettingsOverride? = null,
     modifier: Modifier = Modifier
 ) {
     // Settings integration
     val settingsManager = remember { SettingsManager.instance }
-    val settings by settingsManager.settings.collectAsState()
+    val globalSettings by settingsManager.settings.collectAsState()
+
+    // Merge global settings with per-instance overrides
+    val settings = remember(globalSettings, settingsOverride) {
+        globalSettings.withOverrides(settingsOverride)
+    }
 
     // Load font once and share across all tabs (supports custom font via settings)
     val sharedFont = remember(settings.fontName) {

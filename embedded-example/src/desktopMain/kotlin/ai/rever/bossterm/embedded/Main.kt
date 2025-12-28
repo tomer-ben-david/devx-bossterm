@@ -5,8 +5,11 @@ import ai.rever.bossterm.compose.ContextMenuSection
 import ai.rever.bossterm.compose.ContextMenuSubmenu
 import ai.rever.bossterm.compose.EmbeddableTerminal
 import ai.rever.bossterm.compose.rememberEmbeddableTerminalState
+import ai.rever.bossterm.compose.settings.TerminalSettingsOverride
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,8 +44,19 @@ fun main() = application {
 @Composable
 fun EmbeddedExampleApp() {
     val terminalState = rememberEmbeddableTerminalState()
+    val compactTerminalState = rememberEmbeddableTerminalState()
     var sidebarExpanded by remember { mutableStateOf(true) }
+    var bottomPanelExpanded by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("Ready") }
+
+    // Settings override for compact terminal (smaller font, no scrollbar)
+    val compactSettingsOverride = remember {
+        TerminalSettingsOverride(
+            fontSize = 11f,
+            showScrollbar = false,
+            lineSpacing = 1.0f
+        )
+    }
 
     MaterialTheme(
         colorScheme = darkColorScheme()
@@ -61,6 +75,8 @@ fun EmbeddedExampleApp() {
                         onSendCtrlC = { terminalState.sendCtrlC() },
                         onSendCtrlD = { terminalState.sendCtrlD() },
                         onSendCtrlZ = { terminalState.sendCtrlZ() },
+                        onToggleBottomPanel = { bottomPanelExpanded = !bottomPanelExpanded },
+                        bottomPanelExpanded = bottomPanelExpanded,
                         modifier = Modifier.width(250.dp)
                     )
                 }
@@ -75,7 +91,7 @@ fun EmbeddedExampleApp() {
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Terminal area
+                    // Main terminal area
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -135,6 +151,55 @@ fun EmbeddedExampleApp() {
                         )
                     }
 
+                    // Bottom panel with compact terminal (demonstrates settingsOverride)
+                    if (bottomPanelExpanded) {
+                        HorizontalDivider(color = Color(0xFF3C3C3C))
+
+                        Column(
+                            modifier = Modifier
+                                .height(200.dp)
+                                .fillMaxWidth()
+                        ) {
+                            // Bottom panel header
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = Color(0xFF2D2D2D)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Compact Terminal (settingsOverride demo: fontSize=11, no scrollbar)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.Gray
+                                    )
+                                    TextButton(
+                                        onClick = { bottomPanelExpanded = false },
+                                        colors = ButtonDefaults.textButtonColors(contentColor = Color.Gray)
+                                    ) {
+                                        Text("Close")
+                                    }
+                                }
+                            }
+
+                            // Compact terminal with settings override
+                            EmbeddableTerminal(
+                                state = compactTerminalState,
+                                initialCommand = "echo 'Compact terminal with settingsOverride'",
+                                // Using settingsOverride to customize this terminal instance
+                                settingsOverride = compactSettingsOverride,
+                                onExit = { exitCode ->
+                                    statusMessage = "Compact terminal exited: $exitCode"
+                                },
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(4.dp)
+                            )
+                        }
+                    }
+
                     // Status bar
                     StatusBar(
                         message = statusMessage,
@@ -153,12 +218,17 @@ fun Sidebar(
     onSendCtrlC: () -> Unit,
     onSendCtrlD: () -> Unit,
     onSendCtrlZ: () -> Unit,
+    onToggleBottomPanel: () -> Unit,
+    bottomPanelExpanded: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val scrollState = rememberScrollState()
+
     Column(
         modifier = modifier
             .fillMaxHeight()
             .background(Color(0xFF1E1E1E))
+            .verticalScroll(scrollState)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -207,7 +277,20 @@ fun Sidebar(
         SidebarButton("Send Ctrl+D") { onSendCtrlD() }
         SidebarButton("Send Ctrl+Z") { onSendCtrlZ() }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Settings Override Demo:",
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.Gray
+        )
+
+        // Button to toggle bottom panel with compact terminal
+        SidebarButton(
+            if (bottomPanelExpanded) "Hide Compact Terminal" else "Show Compact Terminal"
+        ) { onToggleBottomPanel() }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         Text(
             text = "Click buttons above, then\nclick in terminal and type\nto test focus restoration.",

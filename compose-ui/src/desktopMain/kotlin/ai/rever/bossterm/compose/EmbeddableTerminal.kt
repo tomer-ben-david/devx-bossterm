@@ -18,6 +18,8 @@ import ai.rever.bossterm.compose.features.ContextMenuController
 import ai.rever.bossterm.compose.ime.IMEState
 import ai.rever.bossterm.compose.settings.SettingsLoader
 import ai.rever.bossterm.compose.settings.TerminalSettings
+import ai.rever.bossterm.compose.settings.TerminalSettingsOverride
+import ai.rever.bossterm.compose.settings.withOverrides
 import ai.rever.bossterm.compose.tabs.TerminalTab
 import ai.rever.bossterm.terminal.emulator.BossEmulator
 import ai.rever.bossterm.terminal.model.BossTerminal
@@ -132,6 +134,9 @@ data class ContextMenuSubmenu(
  * @param contextMenuItems Custom context menu elements (items, sections, submenus) to add after the default items
  * @param onLinkClick Optional callback for custom link handling. When provided, intercepts Ctrl/Cmd+Click
  *                    on links and context menu "Open Link" action. When null, links open in system browser.
+ * @param settingsOverride Per-instance settings overrides. Non-null fields override resolved settings.
+ *                         Applied after resolving settings from settings/settingsPath/default.
+ *                         Example: `TerminalSettingsOverride(fontSize = 16f)` to use larger font.
  * @param modifier Compose modifier for the terminal container
  */
 @Composable
@@ -150,14 +155,15 @@ fun EmbeddableTerminal(
     onNewWindow: (() -> Unit)? = null,
     contextMenuItems: List<ContextMenuElement> = emptyList(),
     onLinkClick: ((String) -> Unit)? = null,
+    settingsOverride: TerminalSettingsOverride? = null,
     modifier: Modifier = Modifier
 ) {
     // Use provided state or create auto-disposing one
     val effectiveState = state ?: rememberEmbeddableTerminalState(autoDispose = true)
 
-    // Resolve settings: direct > path > default
-    val resolvedSettings = remember(settings, settingsPath) {
-        SettingsLoader.resolveSettings(settings, settingsPath)
+    // Resolve settings: direct > path > default, then apply overrides
+    val resolvedSettings = remember(settings, settingsPath, settingsOverride) {
+        SettingsLoader.resolveSettings(settings, settingsPath).withOverrides(settingsOverride)
     }
 
     // Effective shell command
