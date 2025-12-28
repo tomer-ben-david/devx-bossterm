@@ -227,7 +227,19 @@ data class TerminalTab(
      * Type-ahead manager that tracks predictions and latency statistics.
      * Null when type-ahead is disabled.
      */
-    override val typeAheadManager: TerminalTypeAheadManager? = null
+    override val typeAheadManager: TerminalTypeAheadManager? = null,
+
+    // === Listener Management ===
+
+    /**
+     * Reference to the ModelListener registered with textBuffer.
+     * Must be removed in dispose() to prevent memory leaks.
+     *
+     * CRITICAL: Without proper cleanup, anonymous listeners accumulate over
+     * hours of tab create/close cycles, eventually causing memory pressure
+     * and exceptions when references to disposed displays are invoked.
+     */
+    val modelListener: ai.rever.bossterm.terminal.model.TerminalModelListener? = null
 ) : TerminalSession {
     /**
      * Whether this tab is currently rendering to the UI.
@@ -324,14 +336,30 @@ data class TerminalTab(
 
     /**
      * Clean up resources when closing this tab.
+     * - Removes model listener to prevent memory leaks
      * - Closes write channel (signals consumer to stop)
      * - Cancels all coroutines
      * - Releases terminal resources
      *
      * Note: Process termination is handled by TabController.closeTab() to prevent
      * potential GC issues where the tab might be collected before kill() completes.
+     *
+     * CRITICAL: ModelListener cleanup prevents accumulation of listeners over hours
+     * of tab create/close cycles. Without this, listeners referencing disposed
+     * displays can cause exceptions that crash the rendering pipeline.
      */
     override fun dispose() {
+        // Remove model listener to prevent memory leak
+        // This is CRITICAL - without cleanup, listeners accumulate and can crash
+        // the rendering pipeline when they reference disposed displays
+        modelListener?.let {
+            try {
+                textBuffer.removeModelListener(it)
+            } catch (e: Exception) {
+                System.err.println("WARN: Failed to remove model listener: ${e.message}")
+            }
+        }
+
         // Close write channel to signal consumer to stop
         writeChannel.close()
 
