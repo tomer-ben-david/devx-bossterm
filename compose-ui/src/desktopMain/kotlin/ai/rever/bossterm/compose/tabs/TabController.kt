@@ -75,6 +75,15 @@ class TabController(
     private val sessionListeners = java.util.concurrent.CopyOnWriteArrayList<TerminalSessionListener>()
 
     /**
+     * Dedicated scope for cleanup operations (process kills).
+     * Using a dedicated scope instead of GlobalScope ensures:
+     * 1. Coroutines are cancelled when the controller is disposed
+     * 2. Better lifecycle management than orphaned GlobalScope coroutines
+     * 3. SupervisorJob prevents individual failures from cancelling siblings
+     */
+    private val cleanupScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    /**
      * Add a session lifecycle listener.
      *
      * @param listener The listener to add
@@ -129,6 +138,25 @@ class TabController(
                 println("WARN: Session listener threw exception in onAllSessionsClosed: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Log an error/warning message to both System.err and the tab's debug collector.
+     * This ensures errors are visible in both the console and the debug panel.
+     *
+     * @param tab The tab to log to (or null for global logging)
+     * @param message The error message
+     * @param exception Optional exception for stack trace
+     */
+    private fun logTabError(tab: TerminalTab?, message: String, exception: Exception? = null) {
+        val timestamp = java.time.Instant.now().toString()
+        val fullMessage = if (exception != null) {
+            "[$timestamp] $message\n${exception.stackTraceToString()}"
+        } else {
+            "[$timestamp] $message"
+        }
+        System.err.println(fullMessage)
+        tab?.debugCollector?.recordChunk(fullMessage, ChunkSource.CONSOLE_LOG)
     }
 
     /**
@@ -250,13 +278,18 @@ class TabController(
         // CRITICAL: Register ModelListener to trigger redraws when buffer content changes
         // This is how the Swing TerminalPanel gets notified - without this, the display
         // never knows when to redraw after new text is written to the buffer!
-        textBuffer.addModelListener(object : ai.rever.bossterm.terminal.model.TerminalModelListener {
+        //
+        // IMPORTANT: We store a reference to this listener so it can be removed in
+        // TerminalTab.dispose(). Without proper cleanup, listeners accumulate over
+        // hours of tab create/close cycles, causing memory leaks and potential crashes.
+        val modelListener = object : ai.rever.bossterm.terminal.model.TerminalModelListener {
             override fun modelChanged() {
                 // Use adaptive debouncing to prevent TUI flickering during streaming
                 // Clear+write sequences coalesce into single render within debounce window
                 display.requestRedraw()
             }
-        })
+        }
+        textBuffer.addModelListener(modelListener)
 
         // Configure character encoding mode (ISO-8859-1 enables GR mapping, UTF-8 disables it)
         terminal.setCharacterEncoding(settings.characterEncoding)
@@ -366,7 +399,8 @@ class TabController(
             debugEnabled = mutableStateOf(settings.debugModeEnabled),
             debugCollector = debugCollector,
             typeAheadModel = typeAheadModel,
-            typeAheadManager = typeAheadManager
+            typeAheadManager = typeAheadManager,
+            modelListener = modelListener
         )
 
         // Complete debug collector initialization
@@ -377,6 +411,11 @@ class TabController(
             // Hook into data stream for PTY output capture
             dataStream.debugCallback = { data ->
                 collector.recordChunk(data, ChunkSource.PTY_OUTPUT)
+            }
+
+            // Hook into display for console log capture (errors, warnings)
+            display.debugLogCallback = { message ->
+                collector.recordChunk(message, ChunkSource.CONSOLE_LOG)
             }
         }
 
@@ -479,13 +518,15 @@ class TabController(
         val terminal = BossTerminal(display, textBuffer, styleState)
 
         // Register ModelListener to trigger redraws when buffer content changes
-        textBuffer.addModelListener(object : ai.rever.bossterm.terminal.model.TerminalModelListener {
+        // IMPORTANT: Store reference for cleanup in dispose()
+        val modelListener = object : ai.rever.bossterm.terminal.model.TerminalModelListener {
             override fun modelChanged() {
                 // Use adaptive debouncing to prevent TUI flickering during streaming
                 // Clear+write sequences coalesce into single render within debounce window
                 display.requestRedraw()
             }
-        })
+        }
+        textBuffer.addModelListener(modelListener)
 
         // Configure character encoding mode
         terminal.setCharacterEncoding(settings.characterEncoding)
@@ -594,7 +635,8 @@ class TabController(
             debugEnabled = mutableStateOf(settings.debugModeEnabled),
             debugCollector = debugCollector,
             typeAheadModel = typeAheadModel,
-            typeAheadManager = typeAheadManager
+            typeAheadManager = typeAheadManager,
+            modelListener = modelListener
         )
 
         // Complete debug collector initialization
@@ -602,6 +644,10 @@ class TabController(
             collector.setTab(session)
             dataStream.debugCallback = { data ->
                 collector.recordChunk(data, ChunkSource.PTY_OUTPUT)
+            }
+            // Hook into display for console log capture (errors, warnings)
+            display.debugLogCallback = { message ->
+                collector.recordChunk(message, ChunkSource.CONSOLE_LOG)
             }
         }
 
@@ -689,13 +735,15 @@ class TabController(
         val display = ComposeTerminalDisplay()
         val terminal = BossTerminal(display, textBuffer, styleState)
 
-        textBuffer.addModelListener(object : ai.rever.bossterm.terminal.model.TerminalModelListener {
+        // IMPORTANT: Store reference for cleanup in dispose()
+        val modelListener = object : ai.rever.bossterm.terminal.model.TerminalModelListener {
             override fun modelChanged() {
                 // Use adaptive debouncing to prevent TUI flickering during streaming
                 // Clear+write sequences coalesce into single render within debounce window
                 display.requestRedraw()
             }
-        })
+        }
+        textBuffer.addModelListener(modelListener)
 
         terminal.setCharacterEncoding(settings.characterEncoding)
 
@@ -770,13 +818,18 @@ class TabController(
             debugEnabled = mutableStateOf(settings.debugModeEnabled),
             debugCollector = debugCollector,
             typeAheadModel = null,  // Type-ahead configured after preConnect
-            typeAheadManager = null
+            typeAheadManager = null,
+            modelListener = modelListener
         )
 
         debugCollector?.let { collector ->
             collector.setTab(tab)
             dataStream.debugCallback = { data ->
                 collector.recordChunk(data, ChunkSource.PTY_OUTPUT)
+            }
+            // Hook into display for console log capture (errors, warnings)
+            display.debugLogCallback = { message ->
+                collector.recordChunk(message, ChunkSource.CONSOLE_LOG)
             }
         }
 
@@ -938,24 +991,8 @@ class TabController(
                 }
             }
 
-            // Read PTY output in background
-            tab.coroutineScope.launch(Dispatchers.IO) {
-                val maxChunkSize = 64 * 1024
-
-                while (handle.isAlive()) {
-                    val output = handle.read()
-                    if (output != null) {
-                        val processedOutput = if (output.length > maxChunkSize) {
-                            val safeBoundary = GraphemeBoundaryUtils.findLastCompleteGraphemeBoundary(output, maxChunkSize)
-                            output.substring(0, safeBoundary)
-                        } else {
-                            output
-                        }
-                        tab.dataStream.append(processedOutput)
-                    }
-                }
-                tab.dataStream.close()
-            }
+            // Read PTY output in background (uses shared helper to eliminate duplication)
+            startPtyReaderCoroutine(tab.coroutineScope, tab, handle)
 
             // Start debug state capture coroutine if enabled
             tab.debugCollector?.let { collector ->
@@ -1084,33 +1121,8 @@ class TabController(
                     }
                 }
 
-                // Read PTY output in background
-                launch(Dispatchers.IO) {
-                    val maxChunkSize = 64 * 1024
-
-                    while (handle.isAlive()) {
-                        val output = handle.read()
-                        if (output != null) {
-                            val processedOutput = if (output.length > maxChunkSize) {
-                                // Find the last complete grapheme boundary before maxChunkSize
-                                // to avoid splitting emoji, surrogate pairs, or ZWJ sequences
-                                val safeBoundary = GraphemeBoundaryUtils.findLastCompleteGraphemeBoundary(output, maxChunkSize)
-
-                                val truncatedLength = output.length - safeBoundary
-                                println("WARNING: Process output chunk (${output.length} chars) exceeds limit, " +
-                                        "truncating at grapheme boundary (safe: $safeBoundary chars, " +
-                                        "buffering $truncatedLength chars for next chunk)")
-
-                                output.substring(0, safeBoundary)
-                            } else {
-                                output
-                            }
-
-                            tab.dataStream.append(processedOutput)
-                        }
-                    }
-                    tab.dataStream.close()
-                }
+                // Read PTY output in background (uses shared helper to eliminate duplication)
+                startPtyReaderCoroutine(this, tab, handle)
 
                 // Start debug state capture coroutine if enabled
                 tab.debugCollector?.let { collector ->
@@ -1199,6 +1211,62 @@ class TabController(
     }
 
     /**
+     * Helper function to start PTY reader coroutine.
+     * Reads from PTY handle and appends to terminal data stream.
+     *
+     * CRITICAL: Must handle IOException gracefully to prevent silent death.
+     * Extracted to eliminate code duplication between preConnect and initializeTerminalSession.
+     *
+     * @param scope The coroutine scope to launch the reader in
+     * @param tab The terminal tab to read for
+     * @param handle The PTY process handle to read from
+     */
+    private fun startPtyReaderCoroutine(
+        scope: kotlinx.coroutines.CoroutineScope,
+        tab: TerminalTab,
+        handle: PlatformServices.ProcessService.ProcessHandle
+    ) {
+        scope.launch(Dispatchers.IO) {
+            val maxChunkSize = 64 * 1024
+
+            try {
+                while (handle.isAlive()) {
+                    try {
+                        val output: String? = handle.read()
+                        if (output != null) {
+                            val processedOutput: String = if (output.length > maxChunkSize) {
+                                // Find the last complete grapheme boundary before maxChunkSize
+                                // to avoid splitting emoji, surrogate pairs, or ZWJ sequences
+                                val safeBoundary = GraphemeBoundaryUtils.findLastCompleteGraphemeBoundary(output, maxChunkSize)
+
+                                println("WARNING: Process output chunk (${output.length} chars) exceeds limit, " +
+                                        "truncating at grapheme boundary (safe: $safeBoundary chars, " +
+                                        "buffering ${output.length - safeBoundary} chars for next chunk)")
+
+                                output.substring(0, safeBoundary)
+                            } else {
+                                output
+                            }
+
+                            tab.dataStream.append(processedOutput)
+                        }
+                    } catch (e: java.io.IOException) {
+                        // PTY disconnected - expected during tab close or process exit
+                        logTabError(tab, "INFO: PTY read ended: ${e.message}")
+                        break
+                    }
+                }
+            } catch (e: Exception) {
+                // Unexpected error - log but don't crash
+                logTabError(tab, "ERROR: PTY reader crashed", e)
+            } finally {
+                // Use runCatching to make double-close safe (defensive programming)
+                kotlin.runCatching { tab.dataStream.close() }
+            }
+        }
+    }
+
+    /**
      * Close a tab by index.
      * - Cancels all coroutines
      * - Terminates PTY process
@@ -1207,7 +1275,6 @@ class TabController(
      *
      * @param index Index of the tab to close
      */
-    @OptIn(DelicateCoroutinesApi::class)
     fun closeTab(index: Int) {
         if (index < 0 || index >= tabs.size) return
 
@@ -1215,6 +1282,10 @@ class TabController(
 
         // Hold reference to process before tab disposal to prevent GC during kill()
         val processToKill = tab.processHandle.value
+
+        // Capture debug collector reference BEFORE disposal for async logging
+        // After dispose(), accessing tab.debugCollector is semantically incorrect
+        val debugCollectorForLogging = tab.debugCollector
 
         // Clean up resources (cancels coroutines only, process kill handled below)
         tab.dispose()
@@ -1225,14 +1296,23 @@ class TabController(
         // Notify listeners about session closure (after removal so tab count is accurate)
         notifySessionClosed(tab)
 
-        // Kill process asynchronously with guaranteed reference
+        // Kill process asynchronously with guaranteed reference and timeout
         // This prevents theoretical GC issue where tab might be GC'd before kill() completes
+        // Uses cleanupScope to ensure proper lifecycle management
         if (processToKill != null) {
-            GlobalScope.launch(Dispatchers.IO) {
+            cleanupScope.launch {
                 try {
-                    processToKill.kill()
+                    kotlinx.coroutines.withTimeout(5000) {  // 5 second timeout
+                        processToKill.kill()
+                    }
+                } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                    val message = "[${java.time.Instant.now()}] WARN: Process kill timed out after 5 seconds"
+                    System.err.println(message)
+                    debugCollectorForLogging?.recordChunk(message, ChunkSource.CONSOLE_LOG)
                 } catch (e: Exception) {
-                    println("WARN: Error killing process: ${e.message}")
+                    val message = "[${java.time.Instant.now()}] WARN: Error killing process: ${e.message}"
+                    System.err.println(message)
+                    debugCollectorForLogging?.recordChunk(message, ChunkSource.CONSOLE_LOG)
                 }
             }
         }
@@ -1303,7 +1383,6 @@ class TabController(
      * Dispose all tabs and cleanup resources.
      * Call this when the window is being closed to prevent memory leaks.
      */
-    @OptIn(DelicateCoroutinesApi::class)
     fun disposeAll() {
         // Collect all processes before disposal to prevent GC issues
         val processesToKill = tabs.mapNotNull { it.processHandle.value }
@@ -1317,18 +1396,26 @@ class TabController(
         // Clear the list
         tabs.clear()
 
-        // Kill all processes asynchronously
+        // Kill all processes asynchronously with timeout
+        // Uses cleanupScope to ensure proper lifecycle management
         if (processesToKill.isNotEmpty()) {
-            GlobalScope.launch(Dispatchers.IO) {
+            cleanupScope.launch {
                 processesToKill.forEach { process ->
                     try {
-                        process.kill()
+                        kotlinx.coroutines.withTimeout(5000) {  // 5 second timeout per process
+                            process.kill()
+                        }
+                    } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                        System.err.println("WARN: Process kill timed out after 5 seconds")
                     } catch (e: Exception) {
-                        println("WARN: Error killing process: ${e.message}")
+                        System.err.println("WARN: Error killing process: ${e.message}")
                     }
                 }
             }
         }
+
+        // Cancel cleanup scope to abort any pending process kills on full disposal
+        cleanupScope.cancel()
 
         // Notify listeners
         notifyAllSessionsClosed()

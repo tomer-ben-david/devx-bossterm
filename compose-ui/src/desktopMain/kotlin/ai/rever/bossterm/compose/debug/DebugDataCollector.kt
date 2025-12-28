@@ -397,6 +397,7 @@ class DebugDataCollector(
                     ChunkSource.PTY_OUTPUT -> "PTY>"
                     ChunkSource.USER_INPUT -> "USR<"
                     ChunkSource.EMULATOR_GENERATED -> "EMU!"
+                    ChunkSource.CONSOLE_LOG -> "LOG#"
                 }
                 writer.print("[$timestamp] $sourceTag ")
                 // Escape non-printable characters for readability

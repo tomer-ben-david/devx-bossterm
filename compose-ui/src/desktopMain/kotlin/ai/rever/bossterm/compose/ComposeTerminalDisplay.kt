@@ -133,6 +133,34 @@ class ComposeTerminalDisplay : TerminalDisplay {
     private val debugCursor = System.getenv("BOSSTERM_DEBUG_CURSOR")?.toBoolean() ?: false
 
     /**
+     * Callback for logging internal errors and warnings to the debug collector.
+     * Set by TabController to route logs to the appropriate tab's debug panel.
+     * When null, logs only go to System.err.
+     */
+    var debugLogCallback: ((String) -> Unit)? = null
+
+    /**
+     * Reference to the current redraw processor job.
+     * Used to cancel the previous job when auto-restarting to prevent coroutine leaks.
+     */
+    private var redrawJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Log an error/warning to both System.err and the debug collector.
+     * This ensures errors are visible in both the console and the debug panel.
+     */
+    private fun logError(message: String, exception: Exception? = null) {
+        val timestamp = java.time.Instant.now().toString()
+        val fullMessage = if (exception != null) {
+            "[$timestamp] $message\n${exception.stackTraceToString()}"
+        } else {
+            "[$timestamp] $message"
+        }
+        System.err.println(fullMessage)
+        debugLogCallback?.invoke(fullMessage)
+    }
+
+    /**
      * Cursor state independence: Cursor position, shape, and visibility are managed
      * independently from buffer snapshots and do NOT trigger redraws automatically.
      *
@@ -271,27 +299,58 @@ class ComposeTerminalDisplay : TerminalDisplay {
 
     /**
      * Start the redraw processor coroutine that handles debouncing.
+     *
+     * CRITICAL: This coroutine must never die silently. If it crashes, the UI
+     * will freeze while PTY continues working. We use a loop-based restart
+     * mechanism to prevent stack overflow from repeated crashes.
      */
     private fun startRedrawProcessor() {
-        redrawScope.launch {
-            for (request in redrawChannel) {
-                when (request.priority) {
-                    RedrawPriority.IMMEDIATE -> {
-                        actualRedraw()
-                    }
+        // Cancel existing job if restarting to prevent coroutine leaks
+        redrawJob?.cancel()
 
-                    RedrawPriority.NORMAL -> {
-                        // Apply adaptive debouncing based on current mode
-                        val mode = detectAndUpdateMode()
+        redrawJob = redrawScope.launch {
+            var shouldRestart = true
 
-                        // CRITICAL: Always wait before rendering to coalesce updates
-                        // This prevents TUI flickering where clear+write sequences
-                        // would otherwise render the intermediate "cleared" state.
-                        // The CONFLATED channel ensures only ONE render after the delay,
-                        // even if dozens of updates arrive during the wait.
-                        delay(mode.debounceMs)
-                        actualRedraw()
+            while (shouldRestart && isActive) {
+                shouldRestart = false  // Will be set true only on recoverable crash
+
+                try {
+                    for (request in redrawChannel) {
+                        try {
+                            when (request.priority) {
+                                RedrawPriority.IMMEDIATE -> {
+                                    actualRedraw()
+                                }
+
+                                RedrawPriority.NORMAL -> {
+                                    // Apply adaptive debouncing based on current mode
+                                    val mode = detectAndUpdateMode()
+
+                                    // CRITICAL: Always wait before rendering to coalesce updates
+                                    // This prevents TUI flickering where clear+write sequences
+                                    // would otherwise render the intermediate "cleared" state.
+                                    // The CONFLATED channel ensures only ONE render after the delay,
+                                    // even if dozens of updates arrive during the wait.
+                                    delay(mode.debounceMs)
+                                    actualRedraw()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            // Log but don't crash the loop - individual redraw failures
+                            // should not kill the entire rendering pipeline
+                            logError("ERROR: Redraw failed (continuing): ${e.message}", e)
+                        }
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Normal cancellation during shutdown - don't restart
+                    throw e
+                } catch (e: Exception) {
+                    // Channel closed or fatal error - restart via loop (not recursion)
+                    // This prevents permanent UI freeze from unexpected exceptions
+                    logError("ERROR: Redraw processor crashed, will restart: ${e.message}", e)
+                    // Small delay before restart to prevent tight loop on persistent errors
+                    kotlinx.coroutines.delay(100)
+                    shouldRestart = true
                 }
             }
         }

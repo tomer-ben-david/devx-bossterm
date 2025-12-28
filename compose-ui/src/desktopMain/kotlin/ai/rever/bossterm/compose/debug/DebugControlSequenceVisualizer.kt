@@ -31,7 +31,12 @@ object DebugControlSequenceVisualizer {
                 output.append("┌─ Chunk #${chunk.index} (${chunk.source}) [${chunk.data.size} chars] ─┐\n")
             }
 
-            val visualized = visualizeChunk(chunk.data, settings)
+            // Console logs are plain text - don't parse escape sequences
+            val visualized = if (chunk.source == ChunkSource.CONSOLE_LOG) {
+                String(chunk.data)
+            } else {
+                visualizeChunk(chunk.data, settings)
+            }
             output.append(visualized)
 
             if (settings.showChunkIds) {
