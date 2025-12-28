@@ -241,7 +241,25 @@ fun TabbedTerminal(
     // Cleanup split states when tabs are closed
     LaunchedEffect(tabController.tabs.size) {
         val currentTabIds = tabController.tabs.map { it.id }.toSet()
-        splitStates.keys.removeAll { it !in currentTabIds }
+        // Find orphaned split states (tabs that were closed)
+        val orphanedIds = splitStates.keys.filter { it !in currentTabIds }
+        for (tabId in orphanedIds) {
+            val splitState = splitStates.remove(tabId) ?: continue
+            // Get all processes from split panes before disposing
+            val processes = splitState.getAllSessions().mapNotNull { it.processHandle?.value }
+            // Kill all processes first, then dispose
+            for (process in processes) {
+                try {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        process.kill()
+                    }
+                } catch (e: Exception) {
+                    println("WARN: Error killing split process: ${e.message}")
+                }
+            }
+            // Now safe to dispose the split state (cancels coroutines, closes channels)
+            splitState.dispose()
+        }
     }
 
     // Cleanup when composable is disposed

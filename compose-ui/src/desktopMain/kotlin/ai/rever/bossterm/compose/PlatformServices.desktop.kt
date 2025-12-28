@@ -113,12 +113,21 @@ class DesktopProcessService : PlatformServices.ProcessService {
          */
         private val incompleteUtf8Buffer = mutableListOf<Byte>()
 
+        /**
+         * Flag to coordinate shutdown between kill() and read() operations.
+         * Prevents race conditions where read() is blocked when streams are closed.
+         */
+        private val isShuttingDown = java.util.concurrent.atomic.AtomicBoolean(false)
+
         override suspend fun write(data: String) {
             outputStream.write(data.toByteArray())
             outputStream.flush()
         }
 
         override suspend fun read(): String? {
+            // Early exit if shutting down
+            if (isShuttingDown.get()) return null
+
             return try {
                 val buffer = ByteArray(8192)
                 val len = inputStream.read(buffer)
@@ -156,6 +165,10 @@ class DesktopProcessService : PlatformServices.ProcessService {
                     String(allBytes, 0, allBytes.size, Charsets.UTF_8)
                 }
             } catch (e: Exception) {
+                // During shutdown, exceptions are expected - return null silently
+                if (!isShuttingDown.get()) {
+                    println("WARN: Error reading from PTY: ${e.message}")
+                }
                 null
             }
         }
@@ -205,7 +218,29 @@ class DesktopProcessService : PlatformServices.ProcessService {
         override fun isAlive(): Boolean = process.isAlive
 
         override suspend fun kill() {
-            process.destroy()
+            // Signal shutdown to prevent race conditions with read()
+            isShuttingDown.set(true)
+
+            try {
+                // Close streams first to signal EOF to the process
+                try { outputStream.close() } catch (_: Exception) {}
+                try { inputStream.close() } catch (_: Exception) {}
+
+                // Destroy the process
+                process.destroy()
+
+                // Wait briefly for graceful termination (up to 2 seconds)
+                // waitFor() has built-in timeout, no need for coroutine timeout wrapper
+                val exited = process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+
+                // Force kill if still running
+                if (!exited && process.isAlive) {
+                    process.destroyForcibly()
+                }
+            } catch (e: Exception) {
+                // Last resort - force kill
+                try { process.destroyForcibly() } catch (_: Exception) {}
+            }
         }
 
         override suspend fun waitFor(): Int = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
