@@ -225,8 +225,7 @@ class TabbedTerminalState {
      * @param bytes Raw bytes to send to the shell
      */
     fun sendInput(bytes: ByteArray) {
-        // Convert bytes to String using ISO-8859-1 to preserve raw byte values
-        activeTab?.writeUserInput(String(bytes, Charsets.ISO_8859_1))
+        activeTab?.writeRawBytes(bytes)
     }
 
     /**
@@ -236,7 +235,7 @@ class TabbedTerminalState {
      * @param tabIndex Index of the tab to send input to (0-based)
      */
     fun sendInput(bytes: ByteArray, tabIndex: Int) {
-        tabs.getOrNull(tabIndex)?.writeUserInput(String(bytes, Charsets.ISO_8859_1))
+        tabs.getOrNull(tabIndex)?.writeRawBytes(bytes)
     }
 
     /**

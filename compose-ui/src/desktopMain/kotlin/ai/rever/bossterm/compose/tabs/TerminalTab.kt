@@ -381,6 +381,30 @@ data class TerminalTab(
             }
         }
     }
+
+    /**
+     * Write raw bytes to the process stdin.
+     * Use this for sending control characters or binary data without string encoding issues.
+     *
+     * @param bytes The raw bytes to send to the shell
+     */
+    fun writeRawBytes(bytes: ByteArray) {
+        // Record in debug collector (convert to string for display)
+        debugCollector?.recordChunk(
+            bytes.joinToString("") { "\\x%02x".format(it) },
+            ai.rever.bossterm.compose.debug.ChunkSource.USER_INPUT
+        )
+
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                processHandle.value?.writeBytes(bytes)
+            } catch (e: Exception) {
+                if (debugEnabled.value) {
+                    println("DEBUG: Failed to write raw bytes to PTY: ${e.message}")
+                }
+            }
+        }
+    }
 }
 
 // Hyperlink data class is already defined in ai.rever.bossterm.compose.hyperlinks package

@@ -340,8 +340,7 @@ class EmbeddableTerminalState {
      * @param bytes Raw bytes to send to the shell
      */
     fun sendInput(bytes: ByteArray) {
-        // Convert bytes to String using ISO-8859-1 to preserve raw byte values
-        session?.writeUserInput(String(bytes, Charsets.ISO_8859_1))
+        session?.writeRawBytes(bytes)
     }
 
     /**
