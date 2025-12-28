@@ -119,6 +119,11 @@ DisposableEffect(Unit) {
 | `nextTab()` | Next tab (wraps) |
 | `previousTab()` | Previous tab (wraps) |
 | `getActiveWorkingDirectory()` | Get CWD (OSC 7) |
+| `write(text)` / `write(text, tabIndex)` | Send text to terminal |
+| `sendInput(bytes)` / `sendInput(bytes, tabIndex)` | Send raw bytes |
+| `sendCtrlC()` / `sendCtrlC(tabIndex)` | Send Ctrl+C (interrupt) |
+| `sendCtrlD()` / `sendCtrlD(tabIndex)` | Send Ctrl+D (EOF) |
+| `sendCtrlZ()` / `sendCtrlZ(tabIndex)` | Send Ctrl+Z (suspend) |
 | `dispose()` | Cleanup all sessions |
 
 ---

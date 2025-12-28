@@ -357,6 +357,11 @@ fun MyApp() {
         Text("Run ls")
     }
 
+    // Send control signals (useful for interrupting processes)
+    Button(onClick = { state.sendCtrlC() }) {
+        Text("Stop (Ctrl+C)")
+    }
+
     EmbeddableTerminal(state = state)
 
     // Session preservation across navigation/visibility changes

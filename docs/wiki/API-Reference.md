@@ -47,15 +47,28 @@ fun rememberEmbeddableTerminalState(
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `isReady` | `Boolean` | Terminal is ready for input |
+| `isConnected` | `Boolean` | Terminal is connected to shell process |
+| `isInitializing` | `Boolean` | Terminal is initializing |
 | `isDisposed` | `Boolean` | Terminal has been disposed |
+| `scrollOffset` | `Int` | Current scroll position |
 
 #### Methods
 
-| Method | Description |
-|--------|-------------|
-| `write(text: String)` | Write text to terminal |
-| `dispose()` | Dispose terminal resources |
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `write` | `(text: String)` | Write text to terminal |
+| `sendInput` | `(bytes: ByteArray)` | Send raw bytes to terminal |
+| `sendCtrlC` | `()` | Send Ctrl+C (interrupt) |
+| `sendCtrlD` | `()` | Send Ctrl+D (EOF) |
+| `sendCtrlZ` | `()` | Send Ctrl+Z (suspend) |
+| `paste` | `(text: String)` | Paste with bracketed paste mode |
+| `clear` | `()` | Clear terminal (Ctrl+L) |
+| `scrollToBottom` | `()` | Scroll to bottom |
+| `scrollBy` | `(lines: Int)` | Scroll by lines |
+| `clearSelection` | `()` | Clear selection |
+| `toggleSearch` | `()` | Toggle search bar |
+| `search` | `(query: String)` | Search terminal |
+| `dispose` | `()` | Dispose terminal resources |
 
 ---
 
@@ -115,6 +128,13 @@ fun rememberTabbedTerminalState(
 | `nextTab` | `()` | Switch to next tab |
 | `previousTab` | `()` | Switch to previous tab |
 | `getActiveWorkingDirectory` | `(): String?` | Get active tab's CWD |
+| `write` | `(text: String)` | Send text to active tab |
+| `write` | `(text: String, tabIndex: Int)` | Send text to specific tab |
+| `sendInput` | `(bytes: ByteArray)` | Send raw bytes to active tab |
+| `sendInput` | `(bytes: ByteArray, tabIndex: Int)` | Send raw bytes to specific tab |
+| `sendCtrlC` | `()` / `(tabIndex: Int)` | Send Ctrl+C (interrupt) |
+| `sendCtrlD` | `()` / `(tabIndex: Int)` | Send Ctrl+D (EOF) |
+| `sendCtrlZ` | `()` / `(tabIndex: Int)` | Send Ctrl+Z (suspend) |
 | `addSessionListener` | `(listener)` | Add lifecycle listener |
 | `removeSessionListener` | `(listener)` | Remove listener |
 | `dispose` | `()` | Dispose all sessions |

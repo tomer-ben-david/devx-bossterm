@@ -90,6 +90,14 @@ val state = rememberEmbeddableTerminalState(
 // Write to terminal
 state.write("ls -la\n")
 
+// Send control signals (useful for interrupting processes)
+state.sendCtrlC()  // Send Ctrl+C (interrupt)
+state.sendCtrlD()  // Send Ctrl+D (EOF)
+state.sendCtrlZ()  // Send Ctrl+Z (suspend)
+
+// Send raw bytes
+state.sendInput(byteArrayOf(0x03))  // Same as sendCtrlC()
+
 // Manual dispose (when autoDispose = false)
 state.dispose()
 ```
@@ -391,6 +399,101 @@ fun TerminalWithInAppBrowser() {
                 modifier = Modifier.weight(1f)
             )
         }
+    }
+}
+```
+
+## Programmatic Input
+
+Send text and control signals to the terminal programmatically using `EmbeddableTerminalState`.
+
+### Sending Text
+
+```kotlin
+val state = rememberEmbeddableTerminalState()
+
+// Send a command (include \n for enter)
+state.write("ls -la\n")
+
+// Send multiple commands
+state.write("cd /tmp && ls\n")
+```
+
+### Sending Control Signals
+
+Control signals allow you to interact with running processes:
+
+```kotlin
+val state = rememberEmbeddableTerminalState()
+
+// Interrupt running process (like pressing Ctrl+C)
+state.sendCtrlC()
+
+// Send EOF to close stdin (like pressing Ctrl+D)
+state.sendCtrlD()
+
+// Suspend foreground process (like pressing Ctrl+Z)
+state.sendCtrlZ()
+```
+
+### Sending Raw Bytes
+
+For advanced use cases, send arbitrary bytes:
+
+```kotlin
+val state = rememberEmbeddableTerminalState()
+
+// Send raw bytes
+state.sendInput(byteArrayOf(0x03))  // Same as sendCtrlC()
+state.sendInput(byteArrayOf(0x04))  // Same as sendCtrlD()
+state.sendInput(byteArrayOf(0x1A))  // Same as sendCtrlZ()
+
+// Send escape sequence
+state.sendInput("\u001b[A".toByteArray())  // Up arrow
+```
+
+### FIFO Ordering
+
+All input methods (`write()`, `sendInput()`, `sendCtrlC()`, etc.) share the same internal queue, guaranteeing FIFO (first-in-first-out) order:
+
+```kotlin
+state.write("sleep 10\n")  // Queued first
+state.sendCtrlC()          // Queued second, arrives after sleep starts
+```
+
+### Async Behavior
+
+All input methods are **asynchronous** - they queue the input and return immediately. This ensures the UI remains responsive even during high-volume input.
+
+```kotlin
+// Returns immediately after queuing
+state.sendCtrlC()
+
+// Input is processed by a background coroutine
+// No way to await completion (fire-and-forget)
+```
+
+### Example: Run and Stop Button
+
+```kotlin
+@Composable
+fun TerminalWithControls() {
+    val state = rememberEmbeddableTerminalState()
+
+    Column {
+        Row {
+            Button(onClick = { state.write("sleep 30\n") }) {
+                Text("Run Sleep")
+            }
+            Button(onClick = { state.sendCtrlC() }) {
+                Text("Stop (Ctrl+C)")
+            }
+        }
+
+        EmbeddableTerminal(
+            state = state,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 ```
