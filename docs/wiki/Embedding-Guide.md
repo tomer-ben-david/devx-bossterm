@@ -92,14 +92,24 @@ fun EmbeddableTerminal(
 ```kotlin
 val state = rememberEmbeddableTerminalState()
 
-// Write to terminal
+// Write text to terminal
 state.write("ls -la\n")
 
-// Check if ready
-if (state.isReady) {
+// Send control signals
+state.sendCtrlC()  // Interrupt (like pressing Ctrl+C)
+state.sendCtrlD()  // EOF (like pressing Ctrl+D)
+state.sendCtrlZ()  // Suspend (like pressing Ctrl+Z)
+
+// Send raw bytes
+state.sendInput(byteArrayOf(0x03))  // Same as sendCtrlC()
+
+// Check connection status
+if (state.isConnected) {
     state.write("echo 'Hello!'\n")
 }
 ```
+
+All input methods are asynchronous and share a FIFO queue, ensuring ordered delivery.
 
 ---
 

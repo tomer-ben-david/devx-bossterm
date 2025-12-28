@@ -137,6 +137,13 @@ DisposableEffect(Unit) { onDispose { terminalState.dispose() } }
 | `nextTab()` | Switch to next tab (wraps) |
 | `previousTab()` | Switch to previous tab (wraps) |
 | `getActiveWorkingDirectory()` | Get active tab's working directory (OSC 7) |
+| `write(text)` | Send text to active tab |
+| `write(text, tabIndex)` | Send text to specific tab |
+| `sendInput(bytes)` | Send raw bytes to active tab |
+| `sendInput(bytes, tabIndex)` | Send raw bytes to specific tab |
+| `sendCtrlC()` / `sendCtrlC(tabIndex)` | Send Ctrl+C (interrupt) |
+| `sendCtrlD()` / `sendCtrlD(tabIndex)` | Send Ctrl+D (EOF) |
+| `sendCtrlZ()` / `sendCtrlZ(tabIndex)` | Send Ctrl+Z (suspend) |
 | `addSessionListener(listener)` | Add session lifecycle listener |
 | `removeSessionListener(listener)` | Remove session listener |
 | `dispose()` | Dispose all sessions and cleanup |
@@ -344,6 +351,85 @@ fun MyApp() {
 - Call `terminalState.dispose()` manually when truly done
 - State is automatically initialized on first composition
 - All tabs, sessions, and split states are preserved
+
+## Programmatic Input
+
+Send text and control signals to terminal tabs programmatically.
+
+### Basic Usage
+
+```kotlin
+val state = rememberTabbedTerminalState()
+
+// Send to active tab
+state.write("ls -la\n")
+state.sendCtrlC()
+
+// Send to specific tab by index
+state.write("pwd\n", tabIndex = 1)
+state.sendCtrlC(tabIndex = 0)
+```
+
+### Control Signals
+
+```kotlin
+// Interrupt running process
+state.sendCtrlC()           // Active tab
+state.sendCtrlC(tabIndex)   // Specific tab
+
+// Send EOF
+state.sendCtrlD()
+state.sendCtrlD(tabIndex)
+
+// Suspend process
+state.sendCtrlZ()
+state.sendCtrlZ(tabIndex)
+```
+
+### Raw Bytes
+
+```kotlin
+// Send raw bytes to active tab
+state.sendInput(byteArrayOf(0x03))  // Ctrl+C
+
+// Send to specific tab
+state.sendInput(byteArrayOf(0x04), tabIndex = 1)  // Ctrl+D to tab 1
+```
+
+### Example: Tab Controls
+
+```kotlin
+@Composable
+fun TerminalWithTabControls() {
+    val state = rememberTabbedTerminalState()
+
+    Column {
+        Row {
+            Button(onClick = { state.write("sleep 30\n") }) {
+                Text("Run Sleep")
+            }
+            Button(onClick = { state.sendCtrlC() }) {
+                Text("Stop Active Tab")
+            }
+            // Stop all tabs
+            Button(onClick = {
+                for (i in 0 until state.tabCount) {
+                    state.sendCtrlC(i)
+                }
+            }) {
+                Text("Stop All Tabs")
+            }
+        }
+
+        TabbedTerminal(
+            state = state,
+            onExit = { /* ... */ }
+        )
+    }
+}
+```
+
+All input methods are asynchronous and share the same FIFO queue per tab, ensuring ordered delivery. See [Embedding Guide - Programmatic Input](embedding.md#programmatic-input) for more details.
 
 ## Complete Example
 

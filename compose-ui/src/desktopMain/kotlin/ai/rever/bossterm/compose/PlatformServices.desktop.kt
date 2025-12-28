@@ -124,6 +124,11 @@ class DesktopProcessService : PlatformServices.ProcessService {
             outputStream.flush()
         }
 
+        override suspend fun writeBytes(data: ByteArray) {
+            outputStream.write(data)
+            outputStream.flush()
+        }
+
         override suspend fun read(): String? {
             // Early exit if shutting down
             if (isShuttingDown.get()) return null

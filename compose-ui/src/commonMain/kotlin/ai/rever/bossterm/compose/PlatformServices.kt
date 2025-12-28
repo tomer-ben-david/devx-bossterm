@@ -81,6 +81,12 @@ interface PlatformServices {
             suspend fun write(data: String)
 
             /**
+             * Write raw bytes to process stdin.
+             * Use this for sending control characters or binary data.
+             */
+            suspend fun writeBytes(data: ByteArray)
+
+            /**
              * Read available data from process stdout
              */
             suspend fun read(): String?

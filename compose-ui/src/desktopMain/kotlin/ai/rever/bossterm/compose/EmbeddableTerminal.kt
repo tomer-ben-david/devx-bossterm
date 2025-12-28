@@ -334,6 +334,57 @@ class EmbeddableTerminalState {
     }
 
     /**
+     * Send raw bytes to the terminal process.
+     * Useful for sending control characters like Ctrl+C (0x03) or Ctrl+D (0x04).
+     *
+     * This method is asynchronous - it queues the bytes and returns immediately.
+     * Bytes are sent in FIFO order with respect to [write] calls.
+     *
+     * Note: If the session is not yet initialized or has been disposed, this call is a no-op.
+     *
+     * @param bytes Raw bytes to send to the shell
+     */
+    fun sendInput(bytes: ByteArray) {
+        session?.writeRawBytes(bytes)
+    }
+
+    /**
+     * Send Ctrl+C (SIGINT) to the terminal process.
+     * This is equivalent to pressing Ctrl+C in the terminal to interrupt a running process.
+     *
+     * This method is asynchronous - it queues the signal and returns immediately.
+     *
+     * Note: If the session is not yet initialized or has been disposed, this call is a no-op.
+     */
+    fun sendCtrlC() {
+        sendInput(byteArrayOf(0x03))
+    }
+
+    /**
+     * Send Ctrl+D (EOF) to the terminal process.
+     * This is equivalent to pressing Ctrl+D in the terminal to signal end-of-input.
+     *
+     * This method is asynchronous - it queues the signal and returns immediately.
+     *
+     * Note: If the session is not yet initialized or has been disposed, this call is a no-op.
+     */
+    fun sendCtrlD() {
+        sendInput(byteArrayOf(0x04))
+    }
+
+    /**
+     * Send Ctrl+Z (SIGTSTP) to the terminal process.
+     * This is equivalent to pressing Ctrl+Z in the terminal to suspend the foreground process.
+     *
+     * This method is asynchronous - it queues the signal and returns immediately.
+     *
+     * Note: If the session is not yet initialized or has been disposed, this call is a no-op.
+     */
+    fun sendCtrlZ() {
+        sendInput(byteArrayOf(0x1A))
+    }
+
+    /**
      * Paste text to the terminal with proper bracketed paste mode handling.
      *
      * @param text Text to paste
