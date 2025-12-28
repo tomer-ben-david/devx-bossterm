@@ -617,6 +617,24 @@ None - feature complete for current phase
 December 28, 2025
 
 ### Recent Changes
+- **December 28, 2025**: Settings Override Parameter (#187)
+  - **Feature**: Per-instance settings customization for `TabbedTerminal` and `EmbeddableTerminal`
+  - **Purpose**: Allows different terminal instances to have different configurations (e.g., sidebar terminals with persistent tab bars)
+  - **New Class**: `TerminalSettingsOverride` - Data class with all nullable fields for selective overrides
+  - **New Extension**: `TerminalSettings.withOverrides()` - Merges override with base settings
+  - **New Parameters**:
+    - `TabbedTerminal(settingsOverride: TerminalSettingsOverride? = null)`
+    - `EmbeddableTerminal(settingsOverride: TerminalSettingsOverride? = null)`
+  - **Usage**:
+    ```kotlin
+    TabbedTerminal(
+        settingsOverride = TerminalSettingsOverride(alwaysShowTabBar = true),
+        onExit = { ... }
+    )
+    ```
+  - **New Files**: `compose-ui/.../settings/TerminalSettingsOverride.kt` (270 lines)
+  - **Modified Files**: `TabbedTerminal.kt`, `EmbeddableTerminal.kt`
+  - **Status**: Complete, PR #188
 - **December 28, 2025**: Programmatic Input API (#182)
   - **Feature**: Added API to send raw bytes and control characters to terminal processes
   - **Purpose**: Allows parent applications to send Ctrl+C (interrupt), Ctrl+D (EOF), Ctrl+Z (suspend), and arbitrary bytes

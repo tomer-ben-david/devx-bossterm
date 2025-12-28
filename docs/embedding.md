@@ -57,6 +57,7 @@ fun EmbeddableTerminal(
     onReady: (() -> Unit)? = null,
     contextMenuItems: List<ContextMenuElement> = emptyList(),
     onLinkClick: ((String) -> Unit)? = null,
+    settingsOverride: TerminalSettingsOverride? = null,
     modifier: Modifier = Modifier
 )
 ```
@@ -76,6 +77,7 @@ fun EmbeddableTerminal(
 | `onReady` | `() -> Unit` | Callback when terminal is ready |
 | `contextMenuItems` | `List<ContextMenuElement>` | Custom context menu items |
 | `onLinkClick` | `(String) -> Unit` | Custom link click handler (see [Custom Link Handling](#custom-link-handling)) |
+| `settingsOverride` | `TerminalSettingsOverride?` | Per-instance settings overrides (see [Settings Override](#settings-override)) |
 | `modifier` | `Modifier` | Compose modifier |
 
 ### EmbeddableTerminalState
@@ -347,6 +349,68 @@ EmbeddableTerminal(
 ```
 
 See the main [README](../README.md#configuration) for available settings.
+
+## Settings Override
+
+For per-instance customization without replacing all settings, use `settingsOverride`. This allows you to override specific settings while inheriting others from the resolved settings (via `settings`, `settingsPath`, or defaults).
+
+```kotlin
+import ai.rever.bossterm.compose.settings.TerminalSettingsOverride
+
+EmbeddableTerminal(
+    settingsOverride = TerminalSettingsOverride(
+        fontSize = 12f,           // Override font size
+        showScrollbar = false     // Hide scrollbar
+    )
+    // All other settings come from defaults or settingsPath
+)
+```
+
+### When to Use
+
+| Approach | Use Case |
+|----------|----------|
+| `settings` | Full control over all settings |
+| `settingsPath` | Load settings from a config file |
+| `settingsOverride` | Override specific settings per-instance |
+
+### Combining with Other Settings
+
+`settingsOverride` is applied last, after resolving from `settings`/`settingsPath`/defaults:
+
+```kotlin
+EmbeddableTerminal(
+    // Load base settings from file
+    settingsPath = "~/.myapp/terminal-settings.json",
+    // Override specific settings for this instance
+    settingsOverride = TerminalSettingsOverride(
+        fontSize = 10f  // Smaller font for sidebar terminal
+    )
+)
+```
+
+### Common Override Examples
+
+```kotlin
+// Compact sidebar terminal
+TerminalSettingsOverride(
+    fontSize = 11f,
+    showScrollbar = false,
+    lineSpacing = 1.0f
+)
+
+// High-contrast terminal
+TerminalSettingsOverride(
+    defaultForeground = "0xFFFFFFFF",
+    defaultBackground = "0xFF000000"
+)
+
+// Performance-optimized terminal
+TerminalSettingsOverride(
+    maxRefreshRate = 30,
+    bufferMaxLines = 5000
+)
+```
 
 ## Custom Link Handling
 
