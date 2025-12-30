@@ -489,16 +489,40 @@ object TerminalCanvasRenderer {
      */
     private fun DrawScope.renderText(ctx: RenderingContext, analysisCache: AnalysisCache): Map<Int, List<Hyperlink>> {
         val snapshot = ctx.bufferSnapshot
-        val hyperlinksCache = mutableMapOf<Int, List<Hyperlink>>()
+        val hyperlinksCache = mutableMapOf<Int, MutableList<Hyperlink>>()
 
         for (row in 0 until ctx.visibleRows) {
             val lineIndex = row - ctx.scrollOffset
             val line = snapshot.getLine(lineIndex)
 
-            // Detect hyperlinks in current line
-            val hyperlinks = HyperlinkDetector.detectHyperlinks(line.text, row)
-            if (hyperlinks.isNotEmpty()) {
-                hyperlinksCache[row] = hyperlinks
+            // Detect hyperlinks - handle wrapped lines specially
+            // Check if this row is a continuation of a wrapped line (previous line was wrapped)
+            val prevLineIndex = lineIndex - 1
+            val isPreviousLineWrapped = if (prevLineIndex >= -snapshot.historyLinesCount) {
+                snapshot.getLine(prevLineIndex).isWrapped
+            } else {
+                false
+            }
+
+            // Only detect hyperlinks if this is not a continuation row
+            // (continuation rows were already processed when we handled the start row)
+            if (!isPreviousLineWrapped) {
+                val hyperlinks = if (line.isWrapped) {
+                    // This line is the start of a wrapped sequence - use wrapped detection
+                    HyperlinkDetector.detectHyperlinksWithWrapping(
+                        snapshot, row, ctx.scrollOffset, ctx.visibleCols
+                    )
+                } else {
+                    // Single line - use standard detection
+                    HyperlinkDetector.detectHyperlinks(line.text, row)
+                }
+
+                // Populate cache for ALL rows each hyperlink spans
+                for (hyperlink in hyperlinks) {
+                    for (spanRow in hyperlink.rowSpans.keys) {
+                        hyperlinksCache.getOrPut(spanRow) { mutableListOf() }.add(hyperlink)
+                    }
+                }
             }
 
             // Text batching state
@@ -741,20 +765,23 @@ object TerminalCanvasRenderer {
     private fun DrawScope.renderOverlays(ctx: RenderingContext) {
         val snapshot = ctx.bufferSnapshot
 
-        // Hyperlink underline
+        // Hyperlink underline - supports multi-row hyperlinks
         if (ctx.settings.hyperlinkUnderlineOnHover && ctx.hoveredHyperlink != null && ctx.isModifierPressed) {
             val link = ctx.hoveredHyperlink
-            if (link.row in 0 until ctx.visibleRows) {
-                val y = link.row * ctx.cellHeight
-                val underlineY = y + ctx.cellHeight - 1f
-                val startX = link.startCol * ctx.cellWidth
-                val endX = link.endCol * ctx.cellWidth
-                drawLine(
-                    color = ctx.settings.hyperlinkColorValue,
-                    start = Offset(startX, underlineY),
-                    end = Offset(endX, underlineY),
-                    strokeWidth = 1f
-                )
+            // Draw underline for each row the hyperlink spans
+            for ((spanRow, span) in link.rowSpans) {
+                if (spanRow in 0 until ctx.visibleRows) {
+                    val y = spanRow * ctx.cellHeight
+                    val underlineY = y + ctx.cellHeight - 1f
+                    val startX = span.first * ctx.cellWidth
+                    val endX = span.second * ctx.cellWidth
+                    drawLine(
+                        color = ctx.settings.hyperlinkColorValue,
+                        start = Offset(startX, underlineY),
+                        end = Offset(endX, underlineY),
+                        strokeWidth = 1f
+                    )
+                }
             }
         }
 

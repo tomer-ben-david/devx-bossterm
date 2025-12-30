@@ -1073,10 +1073,10 @@ fun ProperTerminal(
           val row = (pos.y / cellHeight).toInt() + scrollOffset
           val absoluteRow = row - scrollOffset
 
-          // Get hyperlinks for this row
+          // Get hyperlinks for this row (supports multi-row hyperlinks)
           val hyperlinksForRow = cachedHyperlinks[absoluteRow]
           hoveredHyperlink = hyperlinksForRow?.firstOrNull { link ->
-            link.row == absoluteRow && col >= link.startCol && col < link.endCol
+            link.containsPosition(col, absoluteRow)
           }
 
           // Notify hover consumers when hyperlink hover state changes
@@ -1088,11 +1088,13 @@ fun ProperTerminal(
             // Enter callback for new hyperlink with bounds - notify all consumers
             if (hoveredHyperlink != null) {
               val link = hoveredHyperlink!!
+              // For multi-row hyperlinks, provide bounds for the current row's span
+              val span = link.rowSpans[absoluteRow] ?: Pair(link.startCol, link.endCol)
               val bounds = Rect(
-                left = link.startCol * cellWidth,
-                top = (link.row - scrollOffset) * cellHeight,
-                right = link.endCol * cellWidth,
-                bottom = (link.row - scrollOffset + 1) * cellHeight
+                left = span.first * cellWidth,
+                top = (absoluteRow) * cellHeight,
+                right = span.second * cellWidth,
+                bottom = (absoluteRow + 1) * cellHeight
               )
               tab.hoverConsumers.forEach { it.onMouseEntered(bounds, link.url) }
             }
