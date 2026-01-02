@@ -895,7 +895,8 @@ object TerminalCanvasRenderer {
             listOf(endCol, endRow, startCol, startRow)
         }
 
-        val highlightColor = ctx.settings.selectionColorValue.copy(alpha = 0.3f)
+        // Use selection color directly (solid color like VS Code / BossEditor)
+        val highlightColor = ctx.settings.selectionColorValue
 
         for (bufferRow in firstRow..lastRow) {
             val screenRow = bufferRow + ctx.scrollOffset
