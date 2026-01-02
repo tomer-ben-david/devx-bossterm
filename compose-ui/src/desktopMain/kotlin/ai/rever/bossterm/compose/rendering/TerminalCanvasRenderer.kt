@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.sp
 import ai.rever.bossterm.compose.SelectionMode
 import ai.rever.bossterm.compose.hyperlinks.Hyperlink
 import ai.rever.bossterm.compose.hyperlinks.HyperlinkDetector
+import ai.rever.bossterm.compose.hyperlinks.HyperlinkRegistry
 import ai.rever.bossterm.compose.settings.TerminalSettings
 import ai.rever.bossterm.compose.util.ColorUtils
 import ai.rever.bossterm.terminal.CursorShape
@@ -95,7 +96,10 @@ data class RenderingContext(
     val workingDirectory: String? = null,
 
     // Whether to detect file/folder paths as clickable hyperlinks
-    val detectFilePaths: Boolean = true
+    val detectFilePaths: Boolean = true,
+
+    // Custom hyperlink registry for per-instance pattern customization
+    val hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry
 )
 
 /**
@@ -544,12 +548,12 @@ object TerminalCanvasRenderer {
                     // This walks backwards to find start even if off-screen
                     HyperlinkDetector.detectHyperlinksWithWrapping(
                         snapshot, row, ctx.scrollOffset, ctx.visibleCols,
-                        ctx.workingDirectory, ctx.detectFilePaths
+                        ctx.workingDirectory, ctx.detectFilePaths, ctx.hyperlinkRegistry
                     )
                 } else {
                     // Single line - use standard detection
                     HyperlinkDetector.detectHyperlinks(
-                        line.text, row, ctx.workingDirectory, ctx.detectFilePaths
+                        line.text, row, ctx.workingDirectory, ctx.detectFilePaths, ctx.hyperlinkRegistry
                     )
                 }
 

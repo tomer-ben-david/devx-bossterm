@@ -15,6 +15,8 @@ import java.util.concurrent.CopyOnWriteArrayList
  * @property startRow First row of the hyperlink (same as row)
  * @property endRow Last row of the hyperlink (same as startRow for single-line links)
  * @property rowSpans Map of row -> (startCol, endCol) for each row the hyperlink spans
+ * @property patternId The ID of the pattern that matched this hyperlink (e.g., "builtin:http")
+ * @property matchedText The original text that was matched before URL transformation
  */
 data class Hyperlink(
     val url: String,
@@ -23,7 +25,9 @@ data class Hyperlink(
     val row: Int,
     val startRow: Int = row,
     val endRow: Int = row,
-    val rowSpans: Map<Int, Pair<Int, Int>> = mapOf(row to Pair(startCol, endCol))
+    val rowSpans: Map<Int, Pair<Int, Int>> = mapOf(row to Pair(startCol, endCol)),
+    val patternId: String? = null,
+    val matchedText: String? = null
 ) {
     /**
      * Check if this hyperlink contains the given position.
@@ -311,20 +315,22 @@ object HyperlinkDetector {
      * @param row The row number in the terminal buffer
      * @param workingDirectory The current working directory for resolving relative paths (optional)
      * @param detectFilePaths Whether to detect file paths as hyperlinks (default: true)
+     * @param registry The pattern registry to use (default: global registry)
      * @return List of detected hyperlinks, sorted by column position
      */
     fun detectHyperlinks(
         text: String,
         row: Int,
         workingDirectory: String? = null,
-        detectFilePaths: Boolean = true
+        detectFilePaths: Boolean = true,
+        registry: HyperlinkRegistry = this.registry
     ): List<Hyperlink> {
         if (text.isEmpty()) return emptyList()
 
         val hyperlinks = mutableListOf<Hyperlink>()
         val coveredRanges = mutableListOf<IntRange>()
 
-        // Apply patterns in priority order
+        // Apply patterns in priority order (use passed registry, not this.registry)
         for (pattern in registry.getPatterns()) {
             // Skip file path patterns if detectFilePaths is disabled
             if (!detectFilePaths && pattern.pathValidator != null) {
@@ -358,7 +364,9 @@ object HyperlinkDetector {
                         url = url,
                         startCol = range.first,
                         endCol = range.last + 1,
-                        row = row
+                        row = row,
+                        patternId = pattern.id,
+                        matchedText = match.value
                     ))
                     coveredRanges.add(range)
                 }
@@ -537,6 +545,7 @@ object HyperlinkDetector {
      * @param terminalWidth Terminal width
      * @param workingDirectory The current working directory for resolving relative paths (optional)
      * @param detectFilePaths Whether to detect file paths as hyperlinks (default: true)
+     * @param registry The pattern registry to use (default: global registry)
      * @return List of hyperlinks that are part of this logical line
      */
     fun detectHyperlinksWithWrapping(
@@ -545,12 +554,13 @@ object HyperlinkDetector {
         scrollOffset: Int,
         terminalWidth: Int,
         workingDirectory: String? = null,
-        detectFilePaths: Boolean = true
+        detectFilePaths: Boolean = true,
+        registry: HyperlinkRegistry = this.registry
     ): List<Hyperlink> {
         val lineInfo = collectWrappedLines(snapshot, screenRow, scrollOffset, terminalWidth)
 
-        // Detect hyperlinks in the joined text
-        val rawHyperlinks = detectHyperlinks(lineInfo.joinedText, lineInfo.startRow, workingDirectory, detectFilePaths)
+        // Detect hyperlinks in the joined text (pass the registry)
+        val rawHyperlinks = detectHyperlinks(lineInfo.joinedText, lineInfo.startRow, workingDirectory, detectFilePaths, registry)
 
         // Convert flat positions to row-based spans
         return rawHyperlinks.map { hyperlink ->
@@ -613,7 +623,9 @@ object HyperlinkDetector {
             row = startRow,
             startRow = startRow,
             endRow = endRow,
-            rowSpans = rowSpans
+            rowSpans = rowSpans,
+            patternId = hyperlink.patternId,
+            matchedText = hyperlink.matchedText
         )
     }
 }

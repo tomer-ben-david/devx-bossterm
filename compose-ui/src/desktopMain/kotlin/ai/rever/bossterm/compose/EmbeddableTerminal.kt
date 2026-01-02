@@ -20,6 +20,9 @@ import ai.rever.bossterm.compose.settings.SettingsLoader
 import ai.rever.bossterm.compose.settings.TerminalSettings
 import ai.rever.bossterm.compose.settings.TerminalSettingsOverride
 import ai.rever.bossterm.compose.settings.withOverrides
+import ai.rever.bossterm.compose.hyperlinks.HyperlinkDetector
+import ai.rever.bossterm.compose.hyperlinks.HyperlinkInfo
+import ai.rever.bossterm.compose.hyperlinks.HyperlinkRegistry
 import ai.rever.bossterm.compose.tabs.TerminalTab
 import ai.rever.bossterm.terminal.emulator.BossEmulator
 import ai.rever.bossterm.terminal.model.BossTerminal
@@ -134,9 +137,14 @@ data class ContextMenuSubmenu(
  * @param contextMenuItems Custom context menu elements (items, sections, submenus) to add after the default items
  * @param onLinkClick Optional callback for custom link handling. When provided, intercepts Ctrl/Cmd+Click
  *                    on links and context menu "Open Link" action. When null, links open in system browser.
+ *                    Receives [HyperlinkInfo] with rich metadata: type (HTTP, FILE, FOLDER, EMAIL, FTP, CUSTOM),
+ *                    isFile/isFolder validation, scheme, patternId, and original matched text.
  * @param settingsOverride Per-instance settings overrides. Non-null fields override resolved settings.
  *                         Applied after resolving settings from settings/settingsPath/default.
  *                         Example: `TerminalSettingsOverride(fontSize = 16f)` to use larger font.
+ * @param hyperlinkRegistry Custom hyperlink pattern registry for per-instance hyperlink customization.
+ *                          Use this to add custom patterns (e.g., JIRA ticket IDs, custom URLs).
+ *                          Default: global HyperlinkDetector.registry
  * @param modifier Compose modifier for the terminal container
  */
 @Composable
@@ -154,8 +162,9 @@ fun EmbeddableTerminal(
     onReady: (() -> Unit)? = null,
     onNewWindow: (() -> Unit)? = null,
     contextMenuItems: List<ContextMenuElement> = emptyList(),
-    onLinkClick: ((String) -> Unit)? = null,
+    onLinkClick: ((HyperlinkInfo) -> Unit)? = null,
     settingsOverride: TerminalSettingsOverride? = null,
+    hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
     modifier: Modifier = Modifier
 ) {
     // Use provided state or create auto-disposing one
@@ -222,6 +231,7 @@ fun EmbeddableTerminal(
             enableDebugPanel = false,  // Hide debug panel in embedded mode
             customContextMenuItems = contextMenuItems,
             onLinkClick = onLinkClick,
+            hyperlinkRegistry = hyperlinkRegistry,
             modifier = modifier
         )
     }
