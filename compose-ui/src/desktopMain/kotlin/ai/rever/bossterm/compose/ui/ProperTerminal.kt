@@ -173,9 +173,8 @@ fun ProperTerminal(
   // IME state from tab
   val imeState = tab.imeState
 
-  // Selection state from tab
-  var selectionStart by tab.selectionStart
-  var selectionEnd by tab.selectionEnd
+  // Selection state from tab (selectionTracker is the single source of truth)
+  val selectionTracker = tab.selectionTracker
   var selectionMode by tab.selectionMode
 
   // X11-style selection clipboard from tab
@@ -211,8 +210,13 @@ fun ProperTerminal(
   fun highlightMatch(matchCol: Int, matchRow: Int, matchLength: Int) {
     // matchRow is already buffer-relative (from search), use directly
     // Selection rendering will convert buffer to screen coords
-    selectionStart = Pair(matchCol, matchRow)
-    selectionEnd = Pair(matchCol + matchLength - 1, matchRow)
+    selectionTracker.setSelection(
+      startCol = matchCol,
+      startRow = matchRow,
+      endCol = matchCol + matchLength - 1,
+      endRow = matchRow,
+      mode = selectionMode
+    )
 
     display.requestImmediateRedraw()
   }
@@ -342,8 +346,13 @@ fun ProperTerminal(
     // Use snapshot for lock-free selection bounds calculation
     val snapshot = terminal.terminalTextBuffer.createSnapshot()
     // Select from start of history to end of screen
-    selectionStart = Pair(0, -snapshot.historyLinesCount)
-    selectionEnd = Pair(snapshot.width - 1, snapshot.height - 1)
+    selectionTracker.setSelection(
+      startCol = 0,
+      startRow = -snapshot.historyLinesCount,
+      endCol = snapshot.width - 1,
+      endRow = snapshot.height - 1,
+      mode = selectionMode
+    )
     display.requestImmediateRedraw()
   }
 
@@ -396,7 +405,7 @@ fun ProperTerminal(
                   TerminalCanvasRenderer.visualColToBufferCol(line, visualCol, snapshot.width)
               } else visualCol
           } else visualCol
-          selectionEnd = Pair(bufferCol, bufferRow)
+          selectionTracker.updateEnd(bufferCol, bufferRow)
         }
 
         display.requestImmediateRedraw()
@@ -412,20 +421,7 @@ fun ProperTerminal(
   // Key on `tab` to ensure paste/write operations target the current tab
   val actionRegistry = remember(isMacOS, tab) {
     val registry = createBuiltinActions(
-      selectionStart = object : MutableState<Pair<Int, Int>?> {
-        override var value: Pair<Int, Int>?
-          get() = selectionStart
-          set(value) { selectionStart = value }
-        override fun component1() = value
-        override fun component2(): (Pair<Int, Int>?) -> Unit = { selectionStart = it }
-      },
-      selectionEnd = object : MutableState<Pair<Int, Int>?> {
-        override var value: Pair<Int, Int>?
-          get() = selectionEnd
-          set(value) { selectionEnd = value }
-        override fun component1() = value
-        override fun component2(): (Pair<Int, Int>?) -> Unit = { selectionEnd = it }
-      },
+      selectionTracker = selectionTracker,
       selectionMode = object : MutableState<SelectionMode> {
         override var value: SelectionMode
           get() = selectionMode
@@ -832,10 +828,14 @@ fun ProperTerminal(
                     }
                   },
                   onCopyLinkAddress = { clipboardManager.setText(AnnotatedString(link.url)) },
-                  hasSelection = selectionStart != null && selectionEnd != null,
+                  hasSelection = selectionTracker.hasSelection(),
                   onCopy = {
-                    if (selectionStart != null && selectionEnd != null) {
-                      val selectedText = SelectionEngine.extractSelectedText(textBuffer, selectionStart!!, selectionEnd!!, selectionMode)
+                    val snapshot = textBuffer.createIncrementalSnapshot()
+                    val resolved = selectionTracker.resolveToCoordinates(snapshot)
+                    if (resolved != null) {
+                      val selectedText = SelectionEngine.extractSelectedTextTrimmed(
+                        textBuffer, resolved.toStartPair(), resolved.toEndPair(), resolved.mode
+                      )
                       if (selectedText.isNotEmpty()) {
                         clipboardManager.setText(AnnotatedString(selectedText))
                       }
@@ -877,10 +877,14 @@ fun ProperTerminal(
                   controller = contextMenuController,
                   x = pos.x,
                   y = pos.y,
-                  hasSelection = selectionStart != null && selectionEnd != null,
+                  hasSelection = selectionTracker.hasSelection(),
                   onCopy = {
-                    if (selectionStart != null && selectionEnd != null) {
-                      val selectedText = SelectionEngine.extractSelectedText(textBuffer, selectionStart!!, selectionEnd!!, selectionMode)
+                    val snapshot = textBuffer.createIncrementalSnapshot()
+                    val resolved = selectionTracker.resolveToCoordinates(snapshot)
+                    if (resolved != null) {
+                      val selectedText = SelectionEngine.extractSelectedTextTrimmed(
+                        textBuffer, resolved.toStartPair(), resolved.toEndPair(), resolved.mode
+                      )
                       if (selectedText.isNotEmpty()) {
                         clipboardManager.setText(AnnotatedString(selectedText))
                       }
@@ -989,8 +993,7 @@ fun ProperTerminal(
                 // Single click: Clear selection on LEFT-CLICK only (not right-click)
                 // Also preserve selection during search navigation
                 if (event.button != androidx.compose.ui.input.pointer.PointerButton.Secondary && !searchVisible) {
-                  selectionStart = null
-                  selectionEnd = null
+                  selectionTracker.clearSelection()
                 }
                 isDragging = false
                 cachedDragSnapshot = null  // Clear cached snapshot
@@ -998,13 +1001,12 @@ fun ProperTerminal(
                 focusRequester.requestFocus()
               }
               2 -> {
-                // Double-click: Select word at cursor position
+                // Double-click: Smart word selection (URLs, paths, quoted strings)
                 // Convert screen coords to buffer-relative for selection
                 val (col, screenRow) = pixelToCharCoords(currentPosition)
                 val bufferRow = screenRow - scrollOffset
-                val (start, end) = SelectionEngine.selectWordAt(col, bufferRow, textBuffer)
-                selectionStart = start
-                selectionEnd = end
+                val (start, end) = SelectionEngine.selectWordAtSmart(col, bufferRow, textBuffer)
+                selectionTracker.setSelection(start.first, start.second, end.first, end.second, selectionMode)
                 isDragging = false
                 cachedDragSnapshot = null  // Clear cached snapshot
 
@@ -1018,13 +1020,12 @@ fun ProperTerminal(
                 focusRequester.requestFocus()
               }
               else -> {
-                // Triple-click (or more): Select entire logical line
-                // Convert screen coords to buffer-relative for selection
+                // Triple-click (or more): Select entire logical line (with wrapped lines)
+                // Uses expandToLogicalLine which also trims trailing whitespace
                 val (col, screenRow) = pixelToCharCoords(currentPosition)
                 val bufferRow = screenRow - scrollOffset
-                val (start, end) = SelectionEngine.selectLineAt(col, bufferRow, textBuffer)
-                selectionStart = start
-                selectionEnd = end
+                val (start, end) = SelectionEngine.expandToLogicalLine(bufferRow, textBuffer)
+                selectionTracker.setSelection(start.first, start.second, end.first, end.second, selectionMode)
                 isDragging = false
                 cachedDragSnapshot = null  // Clear cached snapshot
 
@@ -1143,7 +1144,8 @@ fun ProperTerminal(
                         TerminalCanvasRenderer.visualColToBufferCol(line, visualCol, snapshot.width)
                     } else visualCol
                 } else visualCol
-                selectionStart = Pair(bufferCol, bufferRow)
+                // Initialize tracker with start position (end will be set below)
+                selectionTracker.setSelection(bufferCol, bufferRow, bufferCol, bufferRow, selectionMode)
               }
 
               // Update selection end point as mouse moves
@@ -1167,7 +1169,8 @@ fun ProperTerminal(
                       TerminalCanvasRenderer.visualColToBufferCol(line, visualEndCol, endSnapshot.width)
                   } else visualEndCol
               } else visualEndCol
-              selectionEnd = Pair(bufferEndCol, bufferEndRow)
+              // Update tracker's end point for content-anchored selection
+              selectionTracker.updateEnd(bufferEndCol, bufferEndRow)
 
               // Track position for auto-scroll updates
               lastDragPosition = pos
@@ -1215,26 +1218,28 @@ fun ProperTerminal(
           // BUT: Don't clear on right-click to allow context menu → Copy
           // ALSO: Don't clear multi-click selections (double-click word, triple-click line)
           if (!isDragging && clickCount == 1 && event.button != androidx.compose.ui.input.pointer.PointerButton.Secondary) {
-            selectionStart = null
-            selectionEnd = null
+            selectionTracker.clearSelection()
           }
 
           // Copy-on-select: Automatically copy selected text to clipboard
-          // Capture values first to avoid race condition (TOCTOU)
-          val start = selectionStart
-          val end = selectionEnd
-          if (settings.copyOnSelect && start != null && end != null) {
-            val selectedText = SelectionEngine.extractSelectedText(textBuffer, start, end, selectionMode)
-            if (selectedText.isNotEmpty()) {
-              if (settings.emulateX11CopyPaste) {
-                // X11 mode: Copy to selection clipboard (middle-click buffer)
-                // Limit clipboard size to 10MB to prevent memory issues
-                if (selectedText.length <= 10_000_000) {
-                  selectionClipboard = selectedText
+          if (settings.copyOnSelect) {
+            val snapshot = textBuffer.createIncrementalSnapshot()
+            val resolved = selectionTracker.resolveToCoordinates(snapshot)
+            if (resolved != null) {
+              val selectedText = SelectionEngine.extractSelectedTextTrimmed(
+                textBuffer, resolved.toStartPair(), resolved.toEndPair(), resolved.mode
+              )
+              if (selectedText.isNotEmpty()) {
+                if (settings.emulateX11CopyPaste) {
+                  // X11 mode: Copy to selection clipboard (middle-click buffer)
+                  // Limit clipboard size to 10MB to prevent memory issues
+                  if (selectedText.length <= 10_000_000) {
+                    selectionClipboard = selectedText
+                  }
+                } else {
+                  // Normal mode: Copy to system clipboard
+                  clipboardManager.setText(AnnotatedString(selectedText))
                 }
-              } else {
-                // Normal mode: Copy to system clipboard
-                clipboardManager.setText(AnnotatedString(selectedText))
               }
             }
           }
@@ -1324,7 +1329,7 @@ fun ProperTerminal(
             // Clear selection on any printable key (except Ctrl/Cmd+key combinations)
             // This matches standard terminal behavior - typing clears selection
             if (!keyEvent.isCtrlPressed && !keyEvent.isMetaPressed && !keyEvent.isAltPressed) {
-              if (selectionStart != null || selectionEnd != null) {
+              if (selectionTracker.hasSelection()) {
                 // Don't clear on navigation keys or function keys
                 val isNavigationKey = keyEvent.key in listOf(
                   Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight,
@@ -1334,8 +1339,7 @@ fun ProperTerminal(
                 )
                 if (!isNavigationKey) {
                   // Clear selection before processing the key
-                  selectionStart = null
-                  selectionEnd = null
+                  selectionTracker.clearSelection()
                   display.requestImmediateRedraw()
                 }
               }
@@ -1471,6 +1475,14 @@ fun ProperTerminal(
             null // Force fresh detection
           }
 
+          // Resolve content-anchored selection to current coordinates
+          // This allows selection to follow content as terminal scrolls
+          // selectionTracker is the single source of truth for selection
+          val resolvedSelection = selectionTracker.resolveToCoordinates(bufferSnapshot)
+          val effectiveSelectionStart = resolvedSelection?.toStartPair()
+          val effectiveSelectionEnd = resolvedSelection?.toEndPair()
+          val effectiveSelectionMode = resolvedSelection?.mode ?: selectionMode
+
           // Build rendering context with all state
           val renderingContext = RenderingContext(
             bufferSnapshot = bufferSnapshot,
@@ -1486,9 +1498,9 @@ fun ProperTerminal(
             fontSize = settings.fontSize,
             settings = settings,
             ambiguousCharsAreDoubleWidth = display.ambiguousCharsAreDoubleWidth(),
-            selectionStart = selectionStart,
-            selectionEnd = selectionEnd,
-            selectionMode = selectionMode,
+            selectionStart = effectiveSelectionStart,
+            selectionEnd = effectiveSelectionEnd,
+            selectionMode = effectiveSelectionMode,
             searchVisible = searchVisible,
             searchQuery = searchQuery,
             searchMatches = searchMatches,
@@ -1572,8 +1584,7 @@ fun ProperTerminal(
             searchMatches = emptyList()
 
             // Clear search highlight
-            selectionStart = null
-            selectionEnd = null
+            selectionTracker.clearSelection()
 
             // Restore focus to terminal when search closes
             scope.launch {

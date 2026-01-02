@@ -19,7 +19,7 @@ object BuiltinThemes {
         background = "0xFF000000",
         cursor = "0xFFFFFFFF",
         cursorText = "0xFF000000",
-        selection = "0xFF4A90E2",
+        selection = "0xFF214283",  // VS Code Dark / BossEditor style
         selectionText = "0xFFFFFFFF",
         searchMatch = "0xFFFFFF00",
         hyperlink = "0xFF5C9FFF",

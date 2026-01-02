@@ -127,6 +127,8 @@ class IncrementalSnapshotBuilder(
     /**
      * Process a single line: return cached copy if unchanged, or create new copy.
      * Uses object identity (not position) to find cached entries.
+     *
+     * Stores reference to original line for identity-based selection tracking.
      */
     private fun processLine(originalLine: TerminalLine): VersionedLine {
         val currentVersion = originalLine.getSnapshotVersion()
@@ -142,7 +144,11 @@ class IncrementalSnapshotBuilder(
 
         // Line changed or new - create fresh copy
         val lineCopy = originalLine.copy()
-        val newEntry = VersionedLine(lineCopy, currentVersion)
+        val newEntry = VersionedLine(
+            line = lineCopy,
+            originalLine = originalLine,  // Store original for identity tracking
+            version = currentVersion
+        )
 
         // Update cache with new entry
         lineCache[originalLine] = newEntry
@@ -184,12 +190,20 @@ class IncrementalSnapshotBuilder(
         // Use map{} to create immutable List
         val screenLines = (0 until screenLinesStorage.size).map { i ->
             val line = screenLinesStorage[i]
-            VersionedLine(line.copy(), line.getSnapshotVersion())
+            VersionedLine(
+                line = line.copy(),
+                originalLine = line,  // Store original for identity tracking
+                version = line.getSnapshotVersion()
+            )
         }
 
         val historyLines = (0 until historyLinesStorage.size).map { i ->
             val line = historyLinesStorage[i]
-            VersionedLine(line.copy(), line.getSnapshotVersion())
+            VersionedLine(
+                line = line.copy(),
+                originalLine = line,  // Store original for identity tracking
+                version = line.getSnapshotVersion()
+            )
         }
 
         stats.linesCopied.addAndGet((screenLines.size + historyLines.size).toLong())
@@ -227,9 +241,14 @@ class IncrementalSnapshotBuilder(
 
 /**
  * A terminal line with its version number at snapshot time.
+ *
+ * @property line Copy of the line for thread-safe rendering (immutable)
+ * @property originalLine Reference to original line object for identity tracking
+ * @property version Line version at snapshot time
  */
 data class VersionedLine(
     val line: TerminalLine,
+    val originalLine: TerminalLine,
     val version: Long
 )
 

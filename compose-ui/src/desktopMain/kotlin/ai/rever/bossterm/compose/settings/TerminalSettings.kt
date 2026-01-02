@@ -68,9 +68,10 @@ data class TerminalSettings(
     val defaultBackground: String = "0xFF272822",
 
     /**
-     * Selection highlight color (serialized as ARGB hex)
+     * Selection highlight color (serialized as ARGB hex).
+     * Default matches VS Code Dark / BossEditor style.
      */
-    val selectionColor: String = "0xFF49483E",
+    val selectionColor: String = "0xFF214283",
 
     /**
      * Search result highlight color (serialized as ARGB hex)

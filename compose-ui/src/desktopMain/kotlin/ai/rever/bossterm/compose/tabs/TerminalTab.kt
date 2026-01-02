@@ -22,6 +22,7 @@ import ai.rever.bossterm.terminal.emulator.BossEmulator
 import ai.rever.bossterm.terminal.model.BossTerminal
 import ai.rever.bossterm.terminal.model.TerminalTextBuffer
 import ai.rever.bossterm.compose.debug.DebugDataCollector
+import ai.rever.bossterm.compose.selection.SelectionTracker
 import ai.rever.bossterm.compose.typeahead.ComposeTypeAheadModel
 import ai.rever.bossterm.core.typeahead.TerminalTypeAheadManager
 import java.util.UUID
@@ -154,16 +155,6 @@ data class TerminalTab(
     override val currentSearchMatchIndex: MutableState<Int>,
 
     /**
-     * Selection start position (row, column) or null if no selection.
-     */
-    override val selectionStart: MutableState<Pair<Int, Int>?>,
-
-    /**
-     * Selection end position (row, column) or null if no selection.
-     */
-    override val selectionEnd: MutableState<Pair<Int, Int>?>,
-
-    /**
      * Selection clipboard for X11 emulation mode (copy-on-select).
      */
     override val selectionClipboard: MutableState<String?>,
@@ -247,6 +238,14 @@ data class TerminalTab(
      * Thread-safe: Uses MutableState for safe access from multiple coroutines.
      */
     override val isVisible: MutableState<Boolean> = mutableStateOf(false)
+
+    // === Content-Anchored Selection ===
+
+    /**
+     * Selection tracker for content-anchored selection (iTerm2-style).
+     * Tracks selection by line object identity, surviving buffer scrolling.
+     */
+    override val selectionTracker: SelectionTracker = SelectionTracker(textBuffer)
 
     // === User Input Write Channel ===
     // Uses Channel for sequential write ordering and backpressure handling
