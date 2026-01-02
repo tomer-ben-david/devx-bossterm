@@ -4,6 +4,7 @@ import ai.rever.bossterm.compose.SelectionMode
 import ai.rever.bossterm.core.compatibility.Point
 import ai.rever.bossterm.terminal.model.SelectionUtil.getNextSeparator
 import ai.rever.bossterm.terminal.model.SelectionUtil.getPreviousSeparator
+import ai.rever.bossterm.terminal.model.TerminalLine
 import ai.rever.bossterm.terminal.model.TerminalTextBuffer
 import ai.rever.bossterm.terminal.util.CharUtils
 
@@ -161,5 +162,120 @@ object SelectionEngine {
         }
 
         return result.toString()
+    }
+
+    /**
+     * Find the actual content end of a line (excluding trailing spaces/NULs).
+     * iTerm2 behavior: selection ends at last non-whitespace character.
+     *
+     * @param line The terminal line
+     * @param width The terminal width
+     * @return Column index of content end (exclusive), or 0 if line is empty
+     */
+    fun findContentEnd(line: TerminalLine, width: Int): Int {
+        var endCol = width - 1
+        while (endCol >= 0) {
+            val char = line.charAt(endCol)
+            if (char != ' ' && char != '\u0000' && char != CharUtils.EMPTY_CHAR && char != CharUtils.DWC) {
+                return endCol + 1  // Return exclusive end
+            }
+            endCol--
+        }
+        return 0
+    }
+
+    /**
+     * Expand selection to logical line boundaries.
+     * Joins wrapped lines into single logical unit for triple-click selection.
+     *
+     * @param row Row position (buffer-relative)
+     * @param textBuffer The terminal text buffer
+     * @return Pair of start and end coordinates for the logical line,
+     *         with end column trimmed to actual content (no trailing whitespace)
+     */
+    fun expandToLogicalLine(
+        row: Int,
+        textBuffer: TerminalTextBuffer
+    ): Pair<Pair<Int, Int>, Pair<Int, Int>> {
+        val snapshot = textBuffer.createSnapshot()
+
+        // Find start of logical line (walk backwards while previous line is wrapped)
+        var startRow = row
+        while (startRow > -snapshot.historyLinesCount) {
+            val prevLine = snapshot.getLine(startRow - 1)
+            if (prevLine.isWrapped) {
+                startRow--
+            } else {
+                break
+            }
+        }
+
+        // Find end of logical line (walk forwards while current line is wrapped)
+        var endRow = row
+        while (endRow < snapshot.height - 1) {
+            val currentLine = snapshot.getLine(endRow)
+            if (currentLine.isWrapped) {
+                endRow++
+            } else {
+                break
+            }
+        }
+
+        // Get content end of last line (skip trailing whitespace)
+        val lastLine = snapshot.getLine(endRow)
+        val endCol = findContentEnd(lastLine, snapshot.width)
+
+        return Pair(Pair(0, startRow), Pair(endCol, endRow))
+    }
+
+    /**
+     * Extract selected text with trailing whitespace trimmed from each line.
+     * iTerm2 behavior: copy doesn't include trailing spaces.
+     *
+     * @param textBuffer The terminal text buffer
+     * @param start Selection start position (col, row)
+     * @param end Selection end position (col, row)
+     * @param mode Selection mode (NORMAL for line-based, BLOCK for rectangular)
+     * @return The extracted text with trailing whitespace trimmed
+     */
+    fun extractSelectedTextTrimmed(
+        textBuffer: TerminalTextBuffer,
+        start: Pair<Int, Int>,
+        end: Pair<Int, Int>,
+        mode: SelectionMode = SelectionMode.NORMAL
+    ): String {
+        val rawText = extractSelectedText(textBuffer, start, end, mode)
+        // Trim trailing whitespace from each line
+        return rawText.lines().joinToString("\n") { it.trimEnd() }
+    }
+
+    /**
+     * Smart word selection using pattern matching.
+     * Selects URLs, paths, quoted strings, etc. based on SmartWordSelection patterns.
+     *
+     * Falls back to separator-based selection if no pattern matches.
+     *
+     * @param col Column position
+     * @param row Row position (buffer-relative)
+     * @param textBuffer The terminal text buffer
+     * @return Pair of start and end coordinates for the selected word
+     */
+    fun selectWordAtSmart(
+        col: Int,
+        row: Int,
+        textBuffer: TerminalTextBuffer
+    ): Pair<Pair<Int, Int>, Pair<Int, Int>> {
+        val snapshot = textBuffer.createSnapshot()
+        val line = snapshot.getLine(row)
+        val lineText = line.text
+
+        // Try smart pattern-based selection first
+        val smartResult = SmartWordSelection.selectWordAtPosition(lineText, col, row)
+        if (smartResult != null) {
+            return smartResult
+        }
+
+        // Fall back to separator-based selection
+        return selectWordAt(col, row, textBuffer)
     }
 }

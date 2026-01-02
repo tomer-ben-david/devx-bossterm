@@ -10,6 +10,7 @@ import ai.rever.bossterm.compose.features.ContextMenuController
 import ai.rever.bossterm.compose.hyperlinks.Hyperlink
 import ai.rever.bossterm.compose.hyperlinks.HyperlinkHoverConsumer
 import ai.rever.bossterm.compose.ime.IMEState
+import ai.rever.bossterm.compose.selection.SelectionTracker
 import ai.rever.bossterm.compose.typeahead.ComposeTypeAheadModel
 
 /**
@@ -133,6 +134,12 @@ interface TerminalSession {
      * Current selection mode (NORMAL for line-based, BLOCK for rectangular).
      */
     val selectionMode: MutableState<SelectionMode>
+
+    /**
+     * Content-anchored selection tracker for iTerm2-style selection.
+     * Tracks selection by line object identity, surviving buffer scrolling.
+     */
+    val selectionTracker: SelectionTracker
 
     // === Input Method (IME) ===
 
