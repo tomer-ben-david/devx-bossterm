@@ -2,6 +2,7 @@ package ai.rever.bossterm.compose.selection
 
 import ai.rever.bossterm.compose.SelectionMode
 import ai.rever.bossterm.core.compatibility.Point
+import ai.rever.bossterm.terminal.model.BufferSnapshot
 import ai.rever.bossterm.terminal.model.SelectionUtil.getNextSeparator
 import ai.rever.bossterm.terminal.model.SelectionUtil.getPreviousSeparator
 import ai.rever.bossterm.terminal.model.TerminalLine
@@ -56,35 +57,51 @@ object SelectionEngine {
         row: Int,
         textBuffer: TerminalTextBuffer
     ): Pair<Pair<Int, Int>, Pair<Int, Int>> {
-        // Create immutable snapshot (fast, <1ms with lock, then lock released)
-        // This allows PTY writers to continue during line selection calculation
         val snapshot = textBuffer.createSnapshot()
-
-        var startLine = row
-        var endLine = row
-
-        // Walk backwards through wrapped lines to find logical line start
-        while (startLine > -snapshot.historyLinesCount) {
-            val prevLine = snapshot.getLine(startLine - 1)
-            if (prevLine.isWrapped) {
-                startLine--
-            } else {
-                break
-            }
-        }
-
-        // Walk forwards through wrapped lines to find logical line end
-        while (endLine < snapshot.height - 1) {
-            val currentLine = snapshot.getLine(endLine)
-            if (currentLine.isWrapped) {
-                endLine++
-            } else {
-                break
-            }
-        }
+        val (startLine, endLine) = findLogicalLineBounds(row, snapshot)
 
         // Select from start of first line to end of last line
         return Pair(Pair(0, startLine), Pair(snapshot.width - 1, endLine))
+    }
+
+    /**
+     * Find the logical line bounds (start and end row) for wrapped lines.
+     * Walks backwards while previous line is wrapped, and forwards while current line is wrapped.
+     *
+     * @param row Row position (buffer-relative)
+     * @param snapshot Buffer snapshot for line access
+     * @return Pair of (startRow, endRow) for the logical line
+     */
+    private fun findLogicalLineBounds(
+        row: Int,
+        snapshot: BufferSnapshot
+    ): Pair<Int, Int> {
+        var startRow = row
+        var endRow = row
+
+        // Walk backwards: if the previous line's content continues onto this line (isWrapped),
+        // then that line is part of the same logical line
+        while (startRow > -snapshot.historyLinesCount) {
+            val prevLine = snapshot.getLine(startRow - 1)
+            if (prevLine.isWrapped) {
+                startRow--
+            } else {
+                break
+            }
+        }
+
+        // Walk forwards: if the current line's content continues onto the next line (isWrapped),
+        // then the next line is part of the same logical line
+        while (endRow < snapshot.height - 1) {
+            val currentLine = snapshot.getLine(endRow)
+            if (currentLine.isWrapped) {
+                endRow++
+            } else {
+                break
+            }
+        }
+
+        return Pair(startRow, endRow)
     }
 
     /**
@@ -198,28 +215,7 @@ object SelectionEngine {
         textBuffer: TerminalTextBuffer
     ): Pair<Pair<Int, Int>, Pair<Int, Int>> {
         val snapshot = textBuffer.createSnapshot()
-
-        // Find start of logical line (walk backwards while previous line is wrapped)
-        var startRow = row
-        while (startRow > -snapshot.historyLinesCount) {
-            val prevLine = snapshot.getLine(startRow - 1)
-            if (prevLine.isWrapped) {
-                startRow--
-            } else {
-                break
-            }
-        }
-
-        // Find end of logical line (walk forwards while current line is wrapped)
-        var endRow = row
-        while (endRow < snapshot.height - 1) {
-            val currentLine = snapshot.getLine(endRow)
-            if (currentLine.isWrapped) {
-                endRow++
-            } else {
-                break
-            }
-        }
+        val (startRow, endRow) = findLogicalLineBounds(row, snapshot)
 
         // Get content end of last line (skip trailing whitespace)
         val lastLine = snapshot.getLine(endRow)

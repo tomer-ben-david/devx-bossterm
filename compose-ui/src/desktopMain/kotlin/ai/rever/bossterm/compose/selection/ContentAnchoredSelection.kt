@@ -3,25 +3,59 @@ package ai.rever.bossterm.compose.selection
 import ai.rever.bossterm.compose.SelectionMode
 import ai.rever.bossterm.terminal.model.TerminalLine
 import ai.rever.bossterm.terminal.model.TerminalTextBuffer
+import java.lang.ref.WeakReference
 
 /**
  * Selection anchor tied to a TerminalLine object by identity.
  * Survives buffer scrolling because line objects move but their identity remains.
  *
- * @property line The line object (tracked by identity, not position)
+ * Uses WeakReference to prevent memory leaks when lines are evicted from the
+ * cyclic buffer. When the referenced line is garbage collected, the anchor
+ * is treated as invalid (similar to line eviction from history).
+ *
+ * @property lineRef Weak reference to the line object (tracked by identity, not position)
  * @property column Column offset within the line
  * @property lineVersion Version of line at selection time (for change detection)
  */
-data class SelectionAnchor(
-    val line: TerminalLine,
+class SelectionAnchor private constructor(
+    private val lineRef: WeakReference<TerminalLine>,
     val column: Int,
     val lineVersion: Long
 ) {
     /**
-     * Check if the line content has changed since selection was created.
-     * Useful for optional visual indicators showing stale selection.
+     * Get the referenced line, or null if it was garbage collected.
      */
-    fun hasContentChanged(): Boolean = line.getSnapshotVersion() != lineVersion
+    val line: TerminalLine?
+        get() = lineRef.get()
+
+    /**
+     * Check if the anchor is still valid (line not garbage collected).
+     */
+    fun isValid(): Boolean = lineRef.get() != null
+
+    /**
+     * Check if the line content has changed since selection was created.
+     * Returns true if line was garbage collected (conservatively assume changed).
+     */
+    fun hasContentChanged(): Boolean {
+        val currentLine = lineRef.get() ?: return true
+        return currentLine.getSnapshotVersion() != lineVersion
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is SelectionAnchor) return false
+        return lineRef.get() === other.lineRef.get() &&
+                column == other.column &&
+                lineVersion == other.lineVersion
+    }
+
+    override fun hashCode(): Int {
+        var result = lineRef.get()?.let { System.identityHashCode(it) } ?: 0
+        result = 31 * result + column
+        result = 31 * result + lineVersion.hashCode()
+        return result
+    }
 
     companion object {
         /**
@@ -34,7 +68,7 @@ data class SelectionAnchor(
         ): SelectionAnchor {
             val line = textBuffer.getLine(row)
             return SelectionAnchor(
-                line = line,
+                lineRef = WeakReference(line),
                 column = col,
                 lineVersion = line.getSnapshotVersion()
             )

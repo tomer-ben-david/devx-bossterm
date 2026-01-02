@@ -71,7 +71,7 @@ class SelectionTracker(private val textBuffer: TerminalTextBuffer) {
      * Resolve current selection to buffer coordinates.
      *
      * Uses identity-based lookup to find current row indices for anchored lines.
-     * Returns null if selection is invalidated (both lines evicted from history).
+     * Returns null if selection is invalidated (both lines evicted/garbage collected).
      *
      * @param snapshot The current buffer snapshot for coordinate resolution
      * @return ResolvedSelection with concrete coordinates, or null if invalid
@@ -80,11 +80,16 @@ class SelectionTracker(private val textBuffer: TerminalTextBuffer) {
         val sel = selection ?: return null
 
         // Rebuild identity cache from current snapshot
-        rebuildLineIndexCache(snapshot)
+        buildLineIndexCache(snapshot)
+
+        // Get line references (may be null if garbage collected)
+        val startLine = sel.start.line
+        val endLine = sel.end.line
 
         // Look up current positions by object identity
-        val startRow = lineIndexCache[sel.start.line]
-        val endRow = lineIndexCache[sel.end.line]
+        // If line was garbage collected, treat as evicted (startRow/endRow will be null)
+        val startRow = startLine?.let { lineIndexCache[it] }
+        val endRow = endLine?.let { lineIndexCache[it] }
 
         return when {
             startRow != null && endRow != null -> {
@@ -100,7 +105,7 @@ class SelectionTracker(private val textBuffer: TerminalTextBuffer) {
                 )
             }
             startRow != null -> {
-                // End anchor evicted - clamp to oldest history line
+                // End anchor evicted/GC'd - clamp to oldest history line
                 val oldestRow = -snapshot.historyLinesCount
                 ResolvedSelection(
                     startCol = sel.start.column,
@@ -114,7 +119,7 @@ class SelectionTracker(private val textBuffer: TerminalTextBuffer) {
                 )
             }
             endRow != null -> {
-                // Start anchor evicted - clamp to oldest history line
+                // Start anchor evicted/GC'd - clamp to oldest history line
                 val oldestRow = -snapshot.historyLinesCount
                 ResolvedSelection(
                     startCol = 0,
@@ -128,7 +133,7 @@ class SelectionTracker(private val textBuffer: TerminalTextBuffer) {
                 )
             }
             else -> {
-                // Both evicted - selection is invalid, clear it
+                // Both evicted/GC'd - selection is invalid, clear it
                 selection = null
                 null
             }
@@ -144,14 +149,14 @@ class SelectionTracker(private val textBuffer: TerminalTextBuffer) {
     }
 
     /**
-     * Rebuild the line identity cache from the current snapshot.
+     * Build the line identity cache from the current snapshot.
      * Maps each ORIGINAL TerminalLine object to its current row index.
      *
      * CRITICAL: Must use originalLine (from buffer) not line (the copy).
-     * SelectionAnchor stores references to original line objects, so identity
+     * SelectionAnchor stores WeakReferences to original line objects, so identity
      * lookup must match against originals to track lines across buffer scrolling.
      */
-    private fun rebuildLineIndexCache(snapshot: VersionedBufferSnapshot) {
+    private fun buildLineIndexCache(snapshot: VersionedBufferSnapshot) {
         lineIndexCache.clear()
 
         // Map screen lines (indices 0 to height-1) using ORIGINAL reference

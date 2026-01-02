@@ -144,7 +144,18 @@ object SmartWordSelection {
     val registry = WordSelectionPatternRegistry()
 
     /**
+     * Window size for windowed regex search optimization.
+     * Patterns are searched within +/- this many characters from click position.
+     */
+    private const val SEARCH_WINDOW_RADIUS = 150
+
+    /**
      * Find the word/pattern at the given column position in text.
+     *
+     * Uses windowed search for performance: instead of scanning the entire line
+     * for each pattern, we extract a window around the click position and search
+     * only within that window. This provides O(window_size) instead of O(line_length)
+     * complexity per pattern.
      *
      * @param text The full line text
      * @param col Column position (0-based)
@@ -155,21 +166,53 @@ object SmartWordSelection {
             return null
         }
 
+        // For short lines, search the whole thing
+        if (text.length <= SEARCH_WINDOW_RADIUS * 2) {
+            return selectWordAtFullScan(text, col)
+        }
+
+        // Extract a window around the click position
+        val windowStart = maxOf(0, col - SEARCH_WINDOW_RADIUS)
+        val windowEnd = minOf(text.length, col + SEARCH_WINDOW_RADIUS)
+        val window = text.substring(windowStart, windowEnd)
+        val colInWindow = col - windowStart
+
         // Try each pattern in priority order
         for (pattern in registry.getPatterns()) {
-            // Skip if quick check fails
-            if (pattern.quickCheck != null && !pattern.quickCheck.invoke(text)) {
+            // Skip if quick check fails (check window only for efficiency)
+            if (pattern.quickCheck != null && !pattern.quickCheck.invoke(window)) {
                 continue
             }
 
-            // Find all matches and check if col falls within any
+            // Search within the window only
+            for (match in pattern.regex.findAll(window)) {
+                if (colInWindow >= match.range.first && colInWindow <= match.range.last) {
+                    // Adjust coordinates back to full line
+                    return Pair(
+                        windowStart + match.range.first,
+                        windowStart + match.range.last + 1
+                    )
+                }
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * Full scan implementation for short lines where windowing overhead isn't worth it.
+     */
+    private fun selectWordAtFullScan(text: String, col: Int): Pair<Int, Int>? {
+        for (pattern in registry.getPatterns()) {
+            if (pattern.quickCheck != null && !pattern.quickCheck.invoke(text)) {
+                continue
+            }
             for (match in pattern.regex.findAll(text)) {
                 if (col >= match.range.first && col <= match.range.last) {
                     return Pair(match.range.first, match.range.last + 1)
                 }
             }
         }
-
         return null
     }
 
