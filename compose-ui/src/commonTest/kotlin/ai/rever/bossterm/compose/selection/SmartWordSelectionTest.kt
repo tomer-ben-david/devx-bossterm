@@ -66,6 +66,65 @@ class SmartWordSelectionTest {
         assertEquals("mailto:user@example.com", text.substring(result.first, result.second + 1))
     }
 
+    // ======================== Trailing Punctuation Tests ========================
+
+    @Test
+    fun testUrlExcludesTrailingPeriod() {
+        val text = "Visit https://example.com."
+        val result = SmartWordSelection.selectWordAt(text, 10)
+        assertNotNull(result)
+        assertEquals("https://example.com", text.substring(result.first, result.second + 1))
+    }
+
+    @Test
+    fun testUrlExcludesTrailingComma() {
+        val text = "Check https://example.com, then continue"
+        val result = SmartWordSelection.selectWordAt(text, 10)
+        assertNotNull(result)
+        assertEquals("https://example.com", text.substring(result.first, result.second + 1))
+    }
+
+    @Test
+    fun testUrlExcludesTrailingSemicolon() {
+        val text = "URL: https://example.com;"
+        val result = SmartWordSelection.selectWordAt(text, 10)
+        assertNotNull(result)
+        assertEquals("https://example.com", text.substring(result.first, result.second + 1))
+    }
+
+    @Test
+    fun testUrlExcludesTrailingExclamation() {
+        val text = "Wow https://example.com!"
+        val result = SmartWordSelection.selectWordAt(text, 10)
+        assertNotNull(result)
+        assertEquals("https://example.com", text.substring(result.first, result.second + 1))
+    }
+
+    @Test
+    fun testWwwExcludesTrailingPeriod() {
+        val text = "Visit www.example.com."
+        val result = SmartWordSelection.selectWordAt(text, 10)
+        assertNotNull(result)
+        assertEquals("www.example.com", text.substring(result.first, result.second + 1))
+    }
+
+    @Test
+    fun testUrlWithPathPreservesDot() {
+        // Dot in path should be preserved
+        val text = "Open https://example.com/file.txt"
+        val result = SmartWordSelection.selectWordAt(text, 10)
+        assertNotNull(result)
+        assertEquals("https://example.com/file.txt", text.substring(result.first, result.second + 1))
+    }
+
+    @Test
+    fun testUrlWithQueryString() {
+        val text = "Search https://example.com?q=test"
+        val result = SmartWordSelection.selectWordAt(text, 12)
+        assertNotNull(result)
+        assertEquals("https://example.com?q=test", text.substring(result.first, result.second + 1))
+    }
+
     // ======================== Email Pattern Tests ========================
 
     @Test

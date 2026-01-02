@@ -114,9 +114,10 @@ class HyperlinkRegistry {
 
     private fun addBuiltinPatterns() {
         // HTTP/HTTPS URL pattern (priority 0 - lowest built-in)
+        // Uses two-part pattern to exclude trailing punctuation (., ,, ;, !, etc.)
         addPattern(HyperlinkPattern(
             id = "builtin:http",
-            regex = Regex("\\bhttps?://[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]+"),
+            regex = Regex("\\bhttps?://[\\w\\-._~:/?#\\[\\]@!\$&'()*+,;=%]*[\\w\\-_~/?#@\$&=%]"),
             priority = 0,
             quickCheck = { it.contains("http://") || it.contains("https://") }
         ))
@@ -138,17 +139,19 @@ class HyperlinkRegistry {
         ))
 
         // FTP URL pattern (priority 0)
+        // Uses two-part pattern to exclude trailing punctuation
         addPattern(HyperlinkPattern(
             id = "builtin:ftp",
-            regex = Regex("\\bftps?://[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]+"),
+            regex = Regex("\\bftps?://[\\w\\-._~:/?#\\[\\]@!\$&'()*+,;=%]*[\\w\\-_~/?#@\$&=%]"),
             priority = 0,
             quickCheck = { it.contains("ftp://") || it.contains("ftps://") }
         ))
 
         // www. URL pattern (priority -1, lower than explicit protocols)
+        // Uses two-part pattern to exclude trailing punctuation
         addPattern(HyperlinkPattern(
             id = "builtin:www",
-            regex = Regex("(?<![\\p{L}0-9_.])www\\.[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]+"),
+            regex = Regex("(?<![\\p{L}0-9_.])www\\.[\\w\\-._~:/?#\\[\\]@!\$&'()*+,;=%]*[\\w\\-_~/?#@\$&=%]"),
             priority = -1,
             urlTransformer = { "https://$it" },
             quickCheck = { it.contains("www.") }
