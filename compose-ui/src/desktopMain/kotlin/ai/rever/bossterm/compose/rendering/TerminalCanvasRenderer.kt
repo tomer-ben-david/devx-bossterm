@@ -347,11 +347,17 @@ object TerminalCanvasRenderer {
         // Pass 1: Draw backgrounds and populate analysis cache
         renderBackgrounds(ctx, analysisCache)
 
+        // Pass 1.5: Draw selection highlight BEFORE text (so text renders on top)
+        if (ctx.selectionStart != null && ctx.selectionEnd != null &&
+            !(ctx.searchVisible && ctx.searchMatches.isNotEmpty())) {
+            renderSelectionHighlight(ctx)
+        }
+
         // Pass 2: Draw text and collect hyperlinks (reuse cached analysis)
         val detectedHyperlinks = renderText(ctx, analysisCache)
         hyperlinksCache.putAll(detectedHyperlinks)
 
-        // Pass 3: Draw overlays
+        // Pass 3: Draw overlays (hyperlinks, search, cursor - but NOT selection)
         renderOverlays(ctx)
 
         return hyperlinksCache
@@ -860,11 +866,7 @@ object TerminalCanvasRenderer {
             }
         }
 
-        // Selection highlight
-        if (ctx.selectionStart != null && ctx.selectionEnd != null &&
-            !(ctx.searchVisible && ctx.searchMatches.isNotEmpty())) {
-            renderSelectionHighlight(ctx)
-        }
+        // Selection highlight is now rendered in Pass 1.5 (before text) so text is visible on top
 
         // Cursor
         if (ctx.cursorVisible) {
