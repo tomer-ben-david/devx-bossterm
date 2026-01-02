@@ -137,7 +137,7 @@ fun ProperTerminal(
   menuActions: MenuActions? = null,
   enableDebugPanel: Boolean = true,  // Whether to show debug panel option in context menu
   customContextMenuItems: List<ai.rever.bossterm.compose.ContextMenuElement> = emptyList(),
-  onLinkClick: ((HyperlinkInfo) -> Unit)? = null,  // Custom link handler (null = open in system browser)
+  onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,  // Custom link handler; return true if handled, false for default behavior
   hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,  // Per-instance hyperlink patterns
   modifier: Modifier = Modifier
 ) {
@@ -825,9 +825,9 @@ fun ProperTerminal(
                   y = pos.y,
                   url = link.url,
                   onOpenLink = {
-                    if (onLinkClick != null) {
-                      onLinkClick(link.toHyperlinkInfo())
-                    } else {
+                    val info = link.toHyperlinkInfo()
+                    val handled = onLinkClick?.invoke(info) ?: false
+                    if (!handled) {
                       HyperlinkDetector.openUrl(link.url)
                     }
                   },
@@ -959,9 +959,9 @@ fun ProperTerminal(
             // Standard terminal behavior: Ctrl+Click (Windows/Linux) or Cmd+Click (macOS)
             if (hoveredHyperlink != null && isModifierPressed) {
               val link = hoveredHyperlink!!
-              if (onLinkClick != null) {
-                onLinkClick(link.toHyperlinkInfo())
-              } else {
+              val info = link.toHyperlinkInfo()
+              val handled = onLinkClick?.invoke(info) ?: false
+              if (!handled) {
                 HyperlinkDetector.openUrl(link.url)
               }
               change.consume()

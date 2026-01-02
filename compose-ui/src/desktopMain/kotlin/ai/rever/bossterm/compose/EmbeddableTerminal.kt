@@ -136,9 +136,9 @@ data class ContextMenuSubmenu(
  * @param onReady Callback invoked when terminal is ready (process started)
  * @param contextMenuItems Custom context menu elements (items, sections, submenus) to add after the default items
  * @param onLinkClick Optional callback for custom link handling. When provided, intercepts Ctrl/Cmd+Click
- *                    on links and context menu "Open Link" action. When null, links open in system browser.
- *                    Receives [HyperlinkInfo] with rich metadata: type (HTTP, FILE, FOLDER, EMAIL, FTP, CUSTOM),
- *                    isFile/isFolder validation, scheme, patternId, and original matched text.
+ *                    on links and context menu "Open Link" action. Receives [HyperlinkInfo] with rich metadata:
+ *                    type (HTTP, FILE, FOLDER, EMAIL, FTP, CUSTOM), isFile/isFolder validation, scheme, patternId.
+ *                    Return true if handled, false to proceed with default behavior (open in browser/finder).
  * @param settingsOverride Per-instance settings overrides. Non-null fields override resolved settings.
  *                         Applied after resolving settings from settings/settingsPath/default.
  *                         Example: `TerminalSettingsOverride(fontSize = 16f)` to use larger font.
@@ -162,7 +162,7 @@ fun EmbeddableTerminal(
     onReady: (() -> Unit)? = null,
     onNewWindow: (() -> Unit)? = null,
     contextMenuItems: List<ContextMenuElement> = emptyList(),
-    onLinkClick: ((HyperlinkInfo) -> Unit)? = null,
+    onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     settingsOverride: TerminalSettingsOverride? = null,
     hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
     modifier: Modifier = Modifier

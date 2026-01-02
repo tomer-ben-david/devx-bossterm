@@ -61,7 +61,7 @@ fun SplitContainer(
     splitFocusBorderEnabled: Boolean = true,
     splitFocusBorderColor: Color = Color(0xFF4A90E2),
     splitMinimumSize: Float = 0.1f,
-    onLinkClick: ((HyperlinkInfo) -> Unit)? = null,
+    onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     customContextMenuItems: List<ContextMenuElement> = emptyList(),
     hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
     modifier: Modifier = Modifier
@@ -127,7 +127,7 @@ private fun RenderSplitNode(
     splitFocusBorderEnabled: Boolean,
     splitFocusBorderColor: Color,
     splitMinimumSize: Float,
-    onLinkClick: ((HyperlinkInfo) -> Unit)? = null,
+    onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     customContextMenuItems: List<ContextMenuElement> = emptyList(),
     hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
     modifier: Modifier = Modifier
@@ -259,7 +259,7 @@ private fun RenderPane(
     menuActions: MenuActions?,
     splitFocusBorderEnabled: Boolean,
     splitFocusBorderColor: Color,
-    onLinkClick: ((HyperlinkInfo) -> Unit)? = null,
+    onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     customContextMenuItems: List<ContextMenuElement> = emptyList(),
     hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
     modifier: Modifier = Modifier
@@ -351,7 +351,7 @@ private fun RenderVerticalSplit(
     splitFocusBorderEnabled: Boolean,
     splitFocusBorderColor: Color,
     splitMinimumSize: Float,
-    onLinkClick: ((HyperlinkInfo) -> Unit)? = null,
+    onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     customContextMenuItems: List<ContextMenuElement> = emptyList(),
     hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
     modifier: Modifier = Modifier
@@ -480,7 +480,7 @@ private fun RenderHorizontalSplit(
     splitFocusBorderEnabled: Boolean,
     splitFocusBorderColor: Color,
     splitMinimumSize: Float,
-    onLinkClick: ((HyperlinkInfo) -> Unit)? = null,
+    onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     customContextMenuItems: List<ContextMenuElement> = emptyList(),
     hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
     modifier: Modifier = Modifier
