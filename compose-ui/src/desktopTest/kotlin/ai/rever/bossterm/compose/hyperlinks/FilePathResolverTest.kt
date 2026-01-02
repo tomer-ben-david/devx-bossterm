@@ -11,6 +11,8 @@ class FilePathResolverTest {
 
     private val homeDir = System.getProperty("user.home")
     private val tempDir = System.getProperty("java.io.tmpdir")
+    private val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+    private val fileSeparator = File.separator
 
     @BeforeTest
     fun setup() {
@@ -22,6 +24,7 @@ class FilePathResolverTest {
 
     @Test
     fun testResolveAbsoluteUnixPath() {
+        if (isWindows) return // Skip on Windows - Unix paths not applicable
         val path = "/usr/bin/ls"
         val resolved = FilePathResolver.resolvePath(path, null)
         assertNotNull(resolved)
@@ -42,26 +45,29 @@ class FilePathResolverTest {
         val path = "~/Documents/test/file.txt"
         val resolved = FilePathResolver.resolvePath(path, null)
         assertNotNull(resolved)
-        assertEquals("$homeDir/Documents/test/file.txt", resolved.path)
+        // Use File to normalize path separators for cross-platform comparison
+        val expected = File(homeDir, "Documents/test/file.txt").path
+        assertEquals(expected, resolved.path)
     }
 
     @Test
     fun testResolveRelativePathWithWorkingDirectory() {
         val path = "./subdir/file.txt"
-        val workingDir = "/tmp/testdir"
+        val workingDir = File(tempDir, "testdir").absolutePath
         val resolved = FilePathResolver.resolvePath(path, workingDir)
         assertNotNull(resolved)
-        assertTrue(resolved.path.contains("subdir/file.txt"))
+        // Check for normalized path component
+        assertTrue(resolved.path.contains("subdir") && resolved.path.contains("file.txt"))
     }
 
     @Test
     fun testResolveParentRelativePath() {
         val path = "../sibling/file.txt"
-        val workingDir = "/tmp/testdir/child"
+        val workingDir = File(File(tempDir, "testdir"), "child").absolutePath
         val resolved = FilePathResolver.resolvePath(path, workingDir)
         assertNotNull(resolved)
-        // Should resolve to /tmp/testdir/sibling/file.txt (canonical path)
-        assertTrue(resolved.path.contains("sibling/file.txt"))
+        // Should resolve to parent/sibling/file.txt (canonical path)
+        assertTrue(resolved.path.contains("sibling") && resolved.path.contains("file.txt"))
     }
 
     @Test
