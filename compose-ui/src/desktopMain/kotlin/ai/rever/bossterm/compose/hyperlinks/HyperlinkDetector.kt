@@ -413,6 +413,19 @@ object HyperlinkDetector {
     }
 
     /**
+     * Check if a URL is an SSH URL.
+     */
+    fun isSshUrl(url: String): Boolean = SshUrlParser.isSshUrl(url)
+
+    /**
+     * Parse an SSH URL into connection information.
+     *
+     * @param url The SSH URL to parse
+     * @return SshConnectionInfo if valid, null otherwise
+     */
+    fun parseSshConnection(url: String): SshConnectionInfo? = SshUrlParser.parse(url)
+
+    /**
      * Check if a line potentially contains any hyperlinks.
      *
      * This is a fast check that can be used to skip expensive regex matching
