@@ -253,8 +253,9 @@ class TabController(
         val isMacOS = System.getProperty("os.name")?.lowercase()?.contains("mac") == true
         val username = System.getProperty("user.name")
 
-        val (effectiveCommand, effectiveArguments) = if (command == null && arguments.isEmpty() && isMacOS && username != null && settings.useLoginSession) {
+        val (effectiveCommand, effectiveArguments) = if (command == null && arguments.isEmpty() && isMacOS && username != null && settings.useLoginSession && workingDir == null) {
             // Use login command on macOS for proper session registration
+            // NOTE: Only when workingDir is null - login command ignores workingDirectory parameter
             "/usr/bin/login" to listOf("-fp", username)
         } else {
             // Use provided command or fall back to shell
@@ -493,8 +494,9 @@ class TabController(
         val isMacOS = System.getProperty("os.name")?.lowercase()?.contains("mac") == true
         val username = System.getProperty("user.name")
 
-        val (effectiveCommand, effectiveArguments) = if (command == null && arguments.isEmpty() && isMacOS && username != null && settings.useLoginSession) {
+        val (effectiveCommand, effectiveArguments) = if (command == null && arguments.isEmpty() && isMacOS && username != null && settings.useLoginSession && workingDir == null) {
             // Use login command on macOS for proper session registration
+            // NOTE: Only when workingDir is null - login command ignores workingDirectory parameter
             "/usr/bin/login" to listOf("-fp", username)
         } else {
             // Use provided command or fall back to shell
