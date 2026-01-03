@@ -264,6 +264,7 @@ private fun ApplicationScope.TabbedTerminalWindow(
                                     menuActions = menuActions,
                                     isWindowFocused = { isWindowFocused },
                                     contextMenuItems = customContextMenuItems,
+                                    workingDirectory = "/tmp",
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
