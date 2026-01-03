@@ -138,6 +138,15 @@ class HyperlinkRegistry {
             quickCheck = { it.contains("mailto:") }
         ))
 
+        // SSH URL pattern (priority 0)
+        // Supports ssh://[user@]host[:port][/path] format
+        addPattern(HyperlinkPattern(
+            id = "builtin:ssh",
+            regex = Regex("\\bssh://[\\w.@:-]+[\\w\\-._~:/?#\\[\\]@!\$&'()*+,;=%]*[\\w\\-_~/?#@\$&=%]?"),
+            priority = 0,
+            quickCheck = { it.contains("ssh://") }
+        ))
+
         // FTP URL pattern (priority 0)
         // Uses two-part pattern to exclude trailing punctuation
         addPattern(HyperlinkPattern(
@@ -402,6 +411,19 @@ object HyperlinkDetector {
             e.printStackTrace()
         }
     }
+
+    /**
+     * Check if a URL is an SSH URL.
+     */
+    fun isSshUrl(url: String): Boolean = SshUrlParser.isSshUrl(url)
+
+    /**
+     * Parse an SSH URL into connection information.
+     *
+     * @param url The SSH URL to parse
+     * @return SshConnectionInfo if valid, null otherwise
+     */
+    fun parseSshConnection(url: String): SshConnectionInfo? = SshUrlParser.parse(url)
 
     /**
      * Check if a line potentially contains any hyperlinks.

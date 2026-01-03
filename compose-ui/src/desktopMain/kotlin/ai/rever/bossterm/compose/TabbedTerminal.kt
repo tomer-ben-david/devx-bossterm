@@ -530,7 +530,24 @@ fun TabbedTerminal(
                 splitFocusBorderEnabled = settings.splitFocusBorderEnabled,
                 splitFocusBorderColor = settings.splitFocusBorderColorValue,
                 splitMinimumSize = settings.splitMinimumSize,
-                onLinkClick = onLinkClick,
+                // Wrap onLinkClick to handle SSH URLs by opening new tab with SSH connection
+                onLinkClick = { info ->
+                    // Check if this is an SSH URL
+                    if (info.scheme == "ssh" || info.patternId == "builtin:ssh") {
+                        val sshInfo = HyperlinkDetector.parseSshConnection(info.url)
+                        if (sshInfo != null) {
+                            // Open new tab with SSH command
+                            tabController.createTab(initialCommand = sshInfo.toCommand())
+                            true // Handled
+                        } else {
+                            // Parse failed, delegate to user callback or default
+                            onLinkClick?.invoke(info) ?: false
+                        }
+                    } else {
+                        // Not SSH, delegate to user callback or default
+                        onLinkClick?.invoke(info) ?: false
+                    }
+                },
                 customContextMenuItems = contextMenuItems,
                 hyperlinkRegistry = hyperlinkRegistry,
                 modifier = Modifier.fillMaxSize()
