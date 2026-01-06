@@ -180,8 +180,9 @@ class AIAssistantDetector {
      * @return true if command exits with code 0, false otherwise
      */
     private fun runCommand(vararg args: String): Boolean {
+        var process: Process? = null
         return try {
-            val process = ProcessBuilder(*args)
+            process = ProcessBuilder(*args)
                 .redirectErrorStream(true)
                 .start()
 
@@ -192,6 +193,13 @@ class AIAssistantDetector {
             completed && process.exitValue() == 0
         } catch (e: Exception) {
             false
+        } finally {
+            // Ensure process is cleaned up if it's still running (e.g., timeout)
+            process?.let {
+                if (it.isAlive) {
+                    it.destroyForcibly()
+                }
+            }
         }
     }
 }
