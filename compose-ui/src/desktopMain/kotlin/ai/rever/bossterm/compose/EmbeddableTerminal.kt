@@ -131,11 +131,17 @@ data class ContextMenuSubmenu(
  * @param environment Additional environment variables to set
  * @param initialCommand Optional command to execute after terminal is ready. Uses OSC 133 shell
  *                       integration for proper timing if available, with fallback delay.
+ * @param onInitialCommandComplete Callback invoked when initialCommand finishes executing.
+ *                                  Requires OSC 133 shell integration to detect command completion.
+ *                                  Parameters: success (true if exit code is 0), exitCode (command exit code,
+ *                                  nullable for future timeout-based fallback where exit code is unknown).
  * @param onOutput Callback invoked when terminal produces output
  * @param onTitleChange Callback invoked when terminal title changes (OSC 0/1/2)
  * @param onExit Callback invoked when shell process exits with exit code
  * @param onReady Callback invoked when terminal is ready (process started)
  * @param contextMenuItems Custom context menu elements (items, sections, submenus) to add after the default items
+ * @param onContextMenuOpen Callback invoked right before the context menu is displayed.
+ *                          Use case: refresh dynamic menu item state (e.g., check AI assistant installation status).
  * @param onLinkClick Optional callback for custom link handling. When provided, intercepts Ctrl/Cmd+Click
  *                    on links and context menu "Open Link" action. Receives [HyperlinkInfo] with rich metadata:
  *                    type (HTTP, FILE, FOLDER, EMAIL, FTP, CUSTOM), isFile/isFolder validation, scheme, patternId.
