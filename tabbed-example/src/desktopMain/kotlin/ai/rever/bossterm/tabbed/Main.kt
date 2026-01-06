@@ -284,6 +284,8 @@ private fun ApplicationScope.TabbedTerminalWindow(
                                         windowTitle = "Context menu opened ($contextMenuOpenCount times)"
                                     },
                                     workingDirectory = "/tmp",
+                                    // Initial command to run when terminal starts
+                                    initialCommand = "echo 'TabbedTerminal ready!' && date",
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
