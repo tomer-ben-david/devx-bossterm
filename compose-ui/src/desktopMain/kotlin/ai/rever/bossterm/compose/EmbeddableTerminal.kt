@@ -162,6 +162,7 @@ fun EmbeddableTerminal(
     onReady: (() -> Unit)? = null,
     onNewWindow: (() -> Unit)? = null,
     contextMenuItems: List<ContextMenuElement> = emptyList(),
+    onContextMenuOpen: (() -> Unit)? = null,
     onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     settingsOverride: TerminalSettingsOverride? = null,
     hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
@@ -230,6 +231,7 @@ fun EmbeddableTerminal(
             onNewWindow = onNewWindow,
             enableDebugPanel = false,  // Hide debug panel in embedded mode
             customContextMenuItems = contextMenuItems,
+            onContextMenuOpen = onContextMenuOpen,
             onLinkClick = onLinkClick,
             hyperlinkRegistry = hyperlinkRegistry,
             modifier = modifier

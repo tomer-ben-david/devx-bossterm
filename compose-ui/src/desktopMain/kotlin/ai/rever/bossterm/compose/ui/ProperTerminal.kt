@@ -137,6 +137,7 @@ fun ProperTerminal(
   menuActions: MenuActions? = null,
   enableDebugPanel: Boolean = true,  // Whether to show debug panel option in context menu
   customContextMenuItems: List<ai.rever.bossterm.compose.ContextMenuElement> = emptyList(),
+  onContextMenuOpen: (() -> Unit)? = null,  // Callback invoked right before context menu is shown
   onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,  // Custom link handler; return true if handled, false for default behavior
   hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,  // Per-instance hyperlink patterns
   modifier: Modifier = Modifier
@@ -801,6 +802,8 @@ fun ProperTerminal(
 
             // Check for right-click (secondary button)
             if (event.button == PointerButton.Secondary) {
+              // Invoke callback before showing menu
+              onContextMenuOpen?.invoke()
               // Show context menu
               val pos = change.position
 
