@@ -237,7 +237,7 @@ class TabController(
         arguments: List<String> = emptyList(),
         onProcessExit: (() -> Unit)? = null,
         initialCommand: String? = null,
-        onInitialCommandComplete: ((success: Boolean, exitCode: Int?) -> Unit)? = null,
+        onInitialCommandComplete: ((success: Boolean, exitCode: Int) -> Unit)? = null,
         tabId: String? = null
     ): TerminalTab {
         // Validate tab ID uniqueness if custom ID provided
@@ -1066,7 +1066,7 @@ class TabController(
         command: String,
         arguments: List<String>,
         initialCommand: String? = null,
-        onInitialCommandComplete: ((success: Boolean, exitCode: Int?) -> Unit)? = null
+        onInitialCommandComplete: ((success: Boolean, exitCode: Int) -> Unit)? = null
     ) {
         tab.coroutineScope.launch(Dispatchers.IO) {
             try {
@@ -1190,10 +1190,14 @@ class TabController(
                             if (onInitialCommandComplete != null) {
                                 val completionListener = object : CommandStateListener {
                                     override fun onCommandFinished(exitCode: Int) {
-                                        // Fire callback once with success status and exit code
-                                        onInitialCommandComplete(exitCode == 0, exitCode)
-                                        // Unregister self to ensure callback only fires once
-                                        tab.terminal.removeCommandStateListener(this)
+                                        try {
+                                            println("DEBUG: Initial command completed with exit code: $exitCode")
+                                            // Fire callback once with success status and exit code
+                                            onInitialCommandComplete(exitCode == 0, exitCode)
+                                        } finally {
+                                            // Always unregister, even if callback throws
+                                            tab.terminal.removeCommandStateListener(this)
+                                        }
                                     }
                                 }
                                 tab.terminal.addCommandStateListener(completionListener)

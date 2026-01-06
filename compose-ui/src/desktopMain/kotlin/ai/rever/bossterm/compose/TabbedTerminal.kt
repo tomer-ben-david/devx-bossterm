@@ -75,8 +75,7 @@ import ai.rever.bossterm.compose.ui.ProperTerminal
  * @param initialCommand Optional command to run in the first terminal tab after startup
  * @param onInitialCommandComplete Callback invoked when initialCommand finishes executing.
  *                                  Requires OSC 133 shell integration to detect command completion.
- *                                  Parameters: success (true if exit code is 0), exitCode (command exit code,
- *                                  nullable for future timeout-based fallback where exit code is unknown).
+ *                                  Parameters: success (true if exit code is 0), exitCode (command exit code).
  * @param workingDirectory Initial working directory for the first tab (defaults to user home)
  * @param onLinkClick Optional callback for custom link handling. When provided, intercepts Ctrl/Cmd+Click
  *                    on links and context menu "Open Link" action. Receives HyperlinkInfo with type,
@@ -104,7 +103,7 @@ fun TabbedTerminal(
     menuActions: MenuActions? = null,
     isWindowFocused: () -> Boolean = { true },
     initialCommand: String? = null,
-    onInitialCommandComplete: ((success: Boolean, exitCode: Int?) -> Unit)? = null,
+    onInitialCommandComplete: ((success: Boolean, exitCode: Int) -> Unit)? = null,
     workingDirectory: String? = null,
     onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     contextMenuItems: List<ContextMenuElement> = emptyList(),

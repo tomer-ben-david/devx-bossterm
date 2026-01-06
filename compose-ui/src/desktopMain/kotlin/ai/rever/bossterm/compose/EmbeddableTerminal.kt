@@ -133,8 +133,7 @@ data class ContextMenuSubmenu(
  *                       integration for proper timing if available, with fallback delay.
  * @param onInitialCommandComplete Callback invoked when initialCommand finishes executing.
  *                                  Requires OSC 133 shell integration to detect command completion.
- *                                  Parameters: success (true if exit code is 0), exitCode (command exit code,
- *                                  nullable for future timeout-based fallback where exit code is unknown).
+ *                                  Parameters: success (true if exit code is 0), exitCode (command exit code).
  * @param onOutput Callback invoked when terminal produces output
  * @param onTitleChange Callback invoked when terminal title changes (OSC 0/1/2)
  * @param onExit Callback invoked when shell process exits with exit code
@@ -163,7 +162,7 @@ fun EmbeddableTerminal(
     workingDirectory: String? = null,
     environment: Map<String, String>? = null,
     initialCommand: String? = null,
-    onInitialCommandComplete: ((success: Boolean, exitCode: Int?) -> Unit)? = null,
+    onInitialCommandComplete: ((success: Boolean, exitCode: Int) -> Unit)? = null,
     onOutput: ((String) -> Unit)? = null,
     onTitleChange: ((String) -> Unit)? = null,
     onExit: ((Int) -> Unit)? = null,
@@ -317,7 +316,7 @@ class EmbeddableTerminalState {
         workingDirectory: String?,
         environment: Map<String, String>?,
         initialCommand: String?,
-        onInitialCommandComplete: ((success: Boolean, exitCode: Int?) -> Unit)?,
+        onInitialCommandComplete: ((success: Boolean, exitCode: Int) -> Unit)?,
         onOutput: ((String) -> Unit)?,
         onExit: ((Int) -> Unit)?
     ) {
@@ -581,7 +580,7 @@ private suspend fun initializeProcess(
     workingDirectory: String?,
     environment: Map<String, String>?,
     initialCommand: String?,
-    onInitialCommandComplete: ((success: Boolean, exitCode: Int?) -> Unit)?,
+    onInitialCommandComplete: ((success: Boolean, exitCode: Int) -> Unit)?,
     onExit: ((Int) -> Unit)?
 ) {
     try {
@@ -699,10 +698,14 @@ private suspend fun initializeProcess(
                     if (onInitialCommandComplete != null) {
                         val completionListener = object : CommandStateListener {
                             override fun onCommandFinished(exitCode: Int) {
-                                // Fire callback once with success status and exit code
-                                onInitialCommandComplete(exitCode == 0, exitCode)
-                                // Unregister self to ensure callback only fires once
-                                session.terminal.removeCommandStateListener(this)
+                                try {
+                                    println("DEBUG: Initial command completed with exit code: $exitCode")
+                                    // Fire callback once with success status and exit code
+                                    onInitialCommandComplete(exitCode == 0, exitCode)
+                                } finally {
+                                    // Always unregister, even if callback throws
+                                    session.terminal.removeCommandStateListener(this)
+                                }
                             }
                         }
                         session.terminal.addCommandStateListener(completionListener)
