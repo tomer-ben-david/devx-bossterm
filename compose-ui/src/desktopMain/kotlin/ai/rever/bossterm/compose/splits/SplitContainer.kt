@@ -63,6 +63,7 @@ fun SplitContainer(
     splitMinimumSize: Float = 0.1f,
     onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     customContextMenuItems: List<ContextMenuElement> = emptyList(),
+    onContextMenuOpen: (() -> Unit)? = null,
     hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
     modifier: Modifier = Modifier
 ) {
@@ -93,6 +94,7 @@ fun SplitContainer(
             splitMinimumSize = splitMinimumSize,
             onLinkClick = onLinkClick,
             customContextMenuItems = customContextMenuItems,
+            onContextMenuOpen = onContextMenuOpen,
             hyperlinkRegistry = hyperlinkRegistry,
             modifier = Modifier.fillMaxSize()
         )
@@ -129,6 +131,7 @@ private fun RenderSplitNode(
     splitMinimumSize: Float,
     onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     customContextMenuItems: List<ContextMenuElement> = emptyList(),
+    onContextMenuOpen: (() -> Unit)? = null,
     hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
     modifier: Modifier = Modifier
 ) {
@@ -160,6 +163,7 @@ private fun RenderSplitNode(
                 splitFocusBorderColor = splitFocusBorderColor,
                 onLinkClick = onLinkClick,
                 customContextMenuItems = customContextMenuItems,
+                onContextMenuOpen = onContextMenuOpen,
                 hyperlinkRegistry = hyperlinkRegistry,
                 modifier = modifier
             )
@@ -192,6 +196,7 @@ private fun RenderSplitNode(
                 splitMinimumSize = splitMinimumSize,
                 onLinkClick = onLinkClick,
                 customContextMenuItems = customContextMenuItems,
+                onContextMenuOpen = onContextMenuOpen,
                 hyperlinkRegistry = hyperlinkRegistry,
                 modifier = modifier
             )
@@ -224,6 +229,7 @@ private fun RenderSplitNode(
                 splitMinimumSize = splitMinimumSize,
                 onLinkClick = onLinkClick,
                 customContextMenuItems = customContextMenuItems,
+                onContextMenuOpen = onContextMenuOpen,
                 hyperlinkRegistry = hyperlinkRegistry,
                 modifier = modifier
             )
@@ -261,6 +267,7 @@ private fun RenderPane(
     splitFocusBorderColor: Color,
     onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     customContextMenuItems: List<ContextMenuElement> = emptyList(),
+    onContextMenuOpen: (() -> Unit)? = null,
     hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
     modifier: Modifier = Modifier
 ) {
@@ -317,6 +324,7 @@ private fun RenderPane(
             menuActions = menuActions,
             onLinkClick = onLinkClick,
             customContextMenuItems = customContextMenuItems,
+            onContextMenuOpen = onContextMenuOpen,
             hyperlinkRegistry = hyperlinkRegistry,
             modifier = Modifier.fillMaxSize()
         )
@@ -353,6 +361,7 @@ private fun RenderVerticalSplit(
     splitMinimumSize: Float,
     onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     customContextMenuItems: List<ContextMenuElement> = emptyList(),
+    onContextMenuOpen: (() -> Unit)? = null,
     hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
     modifier: Modifier = Modifier
 ) {
@@ -394,6 +403,7 @@ private fun RenderVerticalSplit(
                     splitMinimumSize = splitMinimumSize,
                     onLinkClick = onLinkClick,
                     customContextMenuItems = customContextMenuItems,
+                    onContextMenuOpen = onContextMenuOpen,
                     hyperlinkRegistry = hyperlinkRegistry,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -430,6 +440,7 @@ private fun RenderVerticalSplit(
                     splitMinimumSize = splitMinimumSize,
                     onLinkClick = onLinkClick,
                     customContextMenuItems = customContextMenuItems,
+                    onContextMenuOpen = onContextMenuOpen,
                     hyperlinkRegistry = hyperlinkRegistry,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -482,6 +493,7 @@ private fun RenderHorizontalSplit(
     splitMinimumSize: Float,
     onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     customContextMenuItems: List<ContextMenuElement> = emptyList(),
+    onContextMenuOpen: (() -> Unit)? = null,
     hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
     modifier: Modifier = Modifier
 ) {
@@ -523,6 +535,7 @@ private fun RenderHorizontalSplit(
                     splitMinimumSize = splitMinimumSize,
                     onLinkClick = onLinkClick,
                     customContextMenuItems = customContextMenuItems,
+                    onContextMenuOpen = onContextMenuOpen,
                     hyperlinkRegistry = hyperlinkRegistry,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -559,6 +572,7 @@ private fun RenderHorizontalSplit(
                     splitMinimumSize = splitMinimumSize,
                     onLinkClick = onLinkClick,
                     customContextMenuItems = customContextMenuItems,
+                    onContextMenuOpen = onContextMenuOpen,
                     hyperlinkRegistry = hyperlinkRegistry,
                     modifier = Modifier.fillMaxSize()
                 )

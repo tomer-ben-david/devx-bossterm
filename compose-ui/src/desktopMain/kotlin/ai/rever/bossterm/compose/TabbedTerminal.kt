@@ -101,6 +101,7 @@ fun TabbedTerminal(
     workingDirectory: String? = null,
     onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     contextMenuItems: List<ContextMenuElement> = emptyList(),
+    onContextMenuOpen: (() -> Unit)? = null,
     settingsOverride: TerminalSettingsOverride? = null,
     hyperlinkRegistry: HyperlinkRegistry = HyperlinkDetector.registry,
     modifier: Modifier = Modifier
@@ -549,6 +550,7 @@ fun TabbedTerminal(
                     }
                 },
                 customContextMenuItems = contextMenuItems,
+                onContextMenuOpen = onContextMenuOpen,
                 hyperlinkRegistry = hyperlinkRegistry,
                 modifier = Modifier.fillMaxSize()
             )
