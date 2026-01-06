@@ -48,6 +48,7 @@ fun EmbeddedExampleApp() {
     var sidebarExpanded by remember { mutableStateOf(true) }
     var bottomPanelExpanded by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("Ready") }
+    var contextMenuOpenCount by remember { mutableStateOf(0) }
 
     // Settings override for compact terminal (smaller font, no scrollbar)
     val compactSettingsOverride = remember {
@@ -110,6 +111,11 @@ fun EmbeddedExampleApp() {
                             },
                             onTitleChange = { title ->
                                 statusMessage = "Title: $title"
+                            },
+                            // onContextMenuOpen callback demo - called before menu shows
+                            onContextMenuOpen = {
+                                contextMenuOpenCount++
+                                statusMessage = "Context menu opened ($contextMenuOpenCount times)"
                             },
                             // Custom context menu items with sections and submenus
                             contextMenuItems = listOf(
@@ -194,6 +200,11 @@ fun EmbeddedExampleApp() {
                                 settingsOverride = compactSettingsOverride,
                                 onExit = { exitCode ->
                                     statusMessage = "Compact terminal exited: $exitCode"
+                                },
+                                // onContextMenuOpen works in compact terminal too
+                                onContextMenuOpen = {
+                                    contextMenuOpenCount++
+                                    statusMessage = "Compact terminal context menu ($contextMenuOpenCount times)"
                                 },
                                 modifier = Modifier
                                     .fillMaxSize()

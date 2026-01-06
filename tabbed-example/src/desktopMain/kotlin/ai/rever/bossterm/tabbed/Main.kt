@@ -102,6 +102,9 @@ private fun ApplicationScope.TabbedTerminalWindow(
     // Track settings panel visibility
     var showSettings by remember { mutableStateOf(false) }
 
+    // Track context menu opens (onContextMenuOpen demo)
+    var contextMenuOpenCount by remember { mutableStateOf(0) }
+
     // Menu actions for wiring up menu bar
     val menuActions = remember { MenuActions() }
 
@@ -264,6 +267,12 @@ private fun ApplicationScope.TabbedTerminalWindow(
                                     menuActions = menuActions,
                                     isWindowFocused = { isWindowFocused },
                                     contextMenuItems = customContextMenuItems,
+                                    // onContextMenuOpen callback - called right before menu is displayed
+                                    // Use case: refresh dynamic menu item state (e.g., AI assistant installation status)
+                                    onContextMenuOpen = {
+                                        contextMenuOpenCount++
+                                        windowTitle = "Context menu opened ($contextMenuOpenCount times)"
+                                    },
                                     workingDirectory = "/tmp",
                                     modifier = Modifier.fillMaxSize()
                                 )
