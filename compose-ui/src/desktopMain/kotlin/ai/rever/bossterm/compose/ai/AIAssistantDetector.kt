@@ -27,6 +27,28 @@ class AIAssistantDetector {
      */
     val installationStatus: StateFlow<Map<String, Boolean>> = _installationStatus.asStateFlow()
 
+    /**
+     * Check if an assistant is installed (uses cached status from last detectAll).
+     *
+     * @param assistantId The assistant ID to check
+     * @return true if installed, false or unknown if not in cache
+     */
+    fun isInstalled(assistantId: String): Boolean {
+        return installationStatus.value[assistantId] == true
+    }
+
+    /**
+     * Check if an assistant is confirmed NOT installed.
+     * Returns true only if detection has run AND explicitly found the assistant is not installed.
+     * Use this for command interception to avoid false positives when detection hasn't run yet.
+     *
+     * @param assistantId The assistant ID to check
+     * @return true only if detection confirmed assistant is not installed, false otherwise
+     */
+    fun isConfirmedNotInstalled(assistantId: String): Boolean {
+        return installationStatus.value[assistantId] == false
+    }
+
     private val home = System.getProperty("user.home")
 
     /**
@@ -49,7 +71,7 @@ class AIAssistantDetector {
      * @return true if installed, false otherwise
      */
     suspend fun detectSingle(assistant: AIAssistantDefinition): Boolean = withContext(Dispatchers.IO) {
-        isInstalled(assistant.id, assistant.command)
+        checkInstallation(assistant.id, assistant.command)
     }
 
     /**
@@ -59,7 +81,7 @@ class AIAssistantDetector {
      * @param command The command name to check
      * @return true if the command is found, false otherwise
      */
-    private fun isInstalled(assistantId: String, command: String): Boolean {
+    private fun checkInstallation(assistantId: String, command: String): Boolean {
         // Strategy 1: Check assistant-specific installation paths
         val specificPaths = getAssistantSpecificPaths(assistantId, command)
         for (path in specificPaths) {

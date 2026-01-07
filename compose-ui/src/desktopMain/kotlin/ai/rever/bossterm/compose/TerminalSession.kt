@@ -12,6 +12,7 @@ import ai.rever.bossterm.compose.hyperlinks.HyperlinkHoverConsumer
 import ai.rever.bossterm.compose.ime.IMEState
 import ai.rever.bossterm.compose.selection.SelectionTracker
 import ai.rever.bossterm.compose.typeahead.ComposeTypeAheadModel
+import ai.rever.bossterm.compose.ai.AICommandInterceptor
 
 /**
  * Interface representing a terminal session abstraction.
@@ -204,6 +205,17 @@ interface TerminalSession {
      * Null when type-ahead is disabled.
      */
     val typeAheadManager: TerminalTypeAheadManager?
+
+    // === AI Command Interception ===
+
+    /**
+     * AI command interceptor for detecting AI assistant commands before execution.
+     * When set, this interceptor tracks user input and can intercept Enter key
+     * to show an install prompt if an AI assistant command is typed but not installed.
+     * Null when AI assistant integration is disabled.
+     */
+    val aiCommandInterceptor: AICommandInterceptor?
+        get() = null  // Default implementation returns null
 
     // === Lifecycle Methods ===
 

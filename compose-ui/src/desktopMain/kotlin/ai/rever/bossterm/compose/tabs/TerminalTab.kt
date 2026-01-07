@@ -24,6 +24,7 @@ import ai.rever.bossterm.terminal.model.TerminalTextBuffer
 import ai.rever.bossterm.compose.debug.DebugDataCollector
 import ai.rever.bossterm.compose.selection.SelectionTracker
 import ai.rever.bossterm.compose.typeahead.ComposeTypeAheadModel
+import ai.rever.bossterm.compose.ai.AICommandInterceptor
 import ai.rever.bossterm.core.typeahead.TerminalTypeAheadManager
 import java.util.UUID
 
@@ -219,6 +220,15 @@ data class TerminalTab(
      * Null when type-ahead is disabled.
      */
     override val typeAheadManager: TerminalTypeAheadManager? = null,
+
+    // === AI Command Interception ===
+
+    /**
+     * AI command interceptor for detecting AI assistant commands before execution.
+     * Null when AI assistant integration is disabled.
+     * Set after tab creation by TabbedTerminal/EmbeddableTerminal.
+     */
+    override var aiCommandInterceptor: AICommandInterceptor? = null,
 
     // === Listener Management ===
 

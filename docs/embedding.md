@@ -988,6 +988,43 @@ When `aiAssistantsEnabled` is `true` in settings (default), the context menu aut
 
 The detection runs asynchronously when the context menu opens, ensuring up-to-date installation status.
 
+### Command Interception (OSC 133 Required)
+
+When OSC 133 shell integration is configured, BossTerm can detect when you type an AI assistant command (like `claude`, `codex`, `gemini`, `opencode`) and show an install prompt **before** the shell tries to execute it.
+
+**Requirements**:
+- OSC 133 shell integration must be configured in your shell (`.bashrc` / `.zshrc`)
+- `aiAssistantsEnabled` must be `true` in settings (default)
+
+**How it works**:
+1. Shell emits `OSC 133;A` when prompt is displayed (tells terminal you're at shell prompt)
+2. Terminal tracks keystrokes as you type
+3. When Enter is pressed, checks if command matches an AI assistant
+4. If assistant is not installed, intercepts Enter and shows install dialog
+5. If you dismiss the dialog, the command is NOT sent to shell
+
+**Shell Setup** (add to `~/.bashrc` or `~/.zshrc`):
+```bash
+# For Bash
+__prompt_command() {
+    local exit_code=$?
+    echo -ne "\033]133;D;${exit_code}\007"
+    echo -ne "\033]133;A\007"
+}
+PROMPT_COMMAND='__prompt_command'
+trap 'echo -ne "\033]133;B\007"' DEBUG
+
+# For Zsh
+precmd() {
+    local exit_code=$?
+    print -Pn "\e]133;D;${exit_code}\a"
+    print -Pn "\e]133;A\a"
+}
+preexec() { print -Pn "\e]133;B\a" }
+```
+
+**Note**: Without OSC 133 shell integration, the command interception feature is automatically disabled (graceful fallback).
+
 ## Migration Guide
 
 ### v1.0.65+ Breaking Changes

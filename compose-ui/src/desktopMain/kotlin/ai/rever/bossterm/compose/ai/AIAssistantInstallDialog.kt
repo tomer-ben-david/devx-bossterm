@@ -263,18 +263,30 @@ fun AIAssistantInstallDialog(
 /**
  * Parameters for AI assistant installation dialog.
  * Shared data class used by both context menu and programmatic API.
+ *
+ * @param assistant The AI assistant to install
+ * @param command The installation command to run
+ * @param npmCommand Optional npm fallback command
+ * @param terminalWriter Function to write to the parent terminal
+ * @param commandToRunAfter Optional command to execute after successful installation
+ *                          (e.g., the original command the user typed that triggered install)
  */
 data class AIInstallDialogParams(
     val assistant: AIAssistantDefinition,
     val command: String,
     val npmCommand: String?,
-    val terminalWriter: (String) -> Unit
+    val terminalWriter: (String) -> Unit,
+    val commandToRunAfter: String? = null
 )
 
 /**
  * Renders an AI assistant installation dialog with standard behavior.
  * Handles showing the dialog, refreshing detection on dismiss, and writing
  * success/failure messages to the terminal.
+ *
+ * If [AIInstallDialogParams.commandToRunAfter] is set, the command will be
+ * executed in the parent terminal after successful installation (with shell
+ * sourcing to pick up PATH changes).
  *
  * @param params Installation parameters (assistant, command, terminalWriter)
  * @param coroutineScope Scope for launching detection refresh
@@ -304,6 +316,14 @@ fun AIInstallDialogHost(
                 // Write result to parent terminal using echo for proper ANSI handling
                 if (success) {
                     p.terminalWriter("echo -e '\\033[32m✓ ${p.assistant.displayName} installed successfully!\\033[0m'\n")
+                    // If there's a command to run after install, source shell and execute it
+                    p.commandToRunAfter?.let { cmd ->
+                        // Source shell profile to pick up PATH changes, then run original command
+                        // Escape single quotes in the command for safe embedding
+                        val escapedCmd = cmd.replace("'", "'\\''")
+                        // Use a fresh login shell to get updated PATH, then run the command
+                        p.terminalWriter("\$SHELL -l -c '$escapedCmd'\n")
+                    }
                 } else {
                     p.terminalWriter("echo -e '\\033[31m✗ ${p.assistant.displayName} installation failed.\\033[0m'\n")
                 }

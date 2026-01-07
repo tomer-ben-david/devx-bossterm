@@ -240,9 +240,13 @@ preexec() {
 - `notifyWithSound`: Play notification sound (default: true)
 
 **How it works**:
-1. Shell emits OSC 133;B when command starts
-2. Shell emits OSC 133;D;exitcode when command finishes
-3. If window is not focused AND command took >= 5 seconds, notification is shown
+1. Shell emits OSC 133;A when prompt is displayed (shell ready for input)
+2. Shell emits OSC 133;B when command starts (user pressed Enter)
+3. Shell emits OSC 133;D;exitcode when command finishes
+4. If window is not focused AND command took >= 5 seconds, notification is shown
+
+**Also enables**:
+- **AI Command Interception**: Terminal knows when at shell prompt (vs in vim/nano) to detect AI assistant commands
 
 ## Build & Run Commands
 
@@ -534,6 +538,7 @@ state.write("echo hello\n", tabIndex = 0)
 
 ### 15. AI Assistant Integration (#225)
 - **Context Menu Integration**: Auto-detect and launch/install AI coding assistants
+- **Command Interception**: Detects typing `claude`, `codex`, `gemini`, `opencode` commands and shows install prompt if not installed (requires OSC 133 shell integration)
 - **Supported Assistants**: Claude Code, Codex CLI, Gemini CLI, OpenCode
 - **Detection**: Multi-strategy detection (path check, `which`, shell-sourced which, nvm paths)
 - **Installation Dialog**: Embedded terminal with live output, npm fallback on failure
@@ -571,6 +576,7 @@ state.installAIAssistant("claude-code", tabId = "my-tab")
 - `compose-ui/.../ai/AIAssistantLauncher.kt`: Launch commands and install commands
 - `compose-ui/.../ai/AIAssistantMenuProvider.kt`: Context menu generation
 - `compose-ui/.../ai/AIAssistantInstallDialog.kt`: Installation dialog with embedded terminal
+- `compose-ui/.../ai/AICommandInterceptor.kt`: Keyboard input interception for AI commands (requires OSC 133)
 
 **Settings**: `aiAssistantsEnabled` (default: true), per-assistant `yoloEnabled` config
 
@@ -588,6 +594,7 @@ None - feature complete for current phase
 - SSH key management UI (future enhancement)
 
 ### Completed (Recent)
+✅ AI Command Interception (keyboard-based install prompts, OSC 133) - January 6, 2026
 ✅ AI Assistant Integration (context menu, detection, installation) - January 6, 2026, issue #225
 ✅ Programmatic Input API (sendInput, sendCtrlC, sendCtrlD, sendCtrlZ) - December 28, 2025, issue #182
 ✅ Command Completion Notifications (OSC 133 Shell Integration) - December 7, 2025

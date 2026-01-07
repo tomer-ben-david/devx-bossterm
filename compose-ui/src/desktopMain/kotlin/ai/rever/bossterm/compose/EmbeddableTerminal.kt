@@ -1,7 +1,28 @@
 package ai.rever.bossterm.compose
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Button
+import androidx.compose.material.ButtonDefaults
+import androidx.compose.material.Surface
+import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +36,7 @@ import ai.rever.bossterm.compose.ai.AIAssistantDefinition
 import ai.rever.bossterm.compose.ai.AIAssistantDetector
 import ai.rever.bossterm.compose.ai.AIAssistantLauncher
 import ai.rever.bossterm.compose.ai.AIAssistants
+import ai.rever.bossterm.compose.ai.AICommandInterceptor
 import ai.rever.bossterm.compose.ai.AIInstallDialogHost
 import ai.rever.bossterm.compose.ai.AIInstallDialogParams
 import ai.rever.bossterm.compose.ai.rememberAIAssistantState
@@ -219,6 +241,15 @@ fun EmbeddableTerminal(
     // State for AI assistant installation dialog (uses shared AIInstallDialogParams)
     var installDialogState by remember { mutableStateOf<AIInstallDialogParams?>(null) }
 
+    // State for AI assistant install confirmation dialog (shown before install)
+    data class InstallConfirmState(
+        val assistant: AIAssistantDefinition,
+        val originalCommand: String,
+        val clearLine: () -> Unit,
+        val terminalWriter: (String) -> Unit
+    )
+    var installConfirmState by remember { mutableStateOf<InstallConfirmState?>(null) }
+
     // Initialize session if not already done (session lives in state, not composable)
     LaunchedEffect(effectiveState, resolvedSettings, effectiveCommand) {
         if (effectiveState.session == null) {
@@ -255,6 +286,48 @@ fun EmbeddableTerminal(
         if (connectionState is ConnectionState.Connected && onReady != null) {
             onReady()
         }
+    }
+
+    // Run AI assistant detection once on startup (for command interception)
+    LaunchedEffect(resolvedSettings.aiAssistantsEnabled) {
+        if (resolvedSettings.aiAssistantsEnabled) {
+            aiState.detector.detectAll()
+        }
+    }
+
+    // Set up AI command interceptor when session is available (detects typing "claude", "aider", etc.)
+    // When an AI command is typed and the assistant is not installed, shows install prompt
+    LaunchedEffect(session, resolvedSettings.aiAssistantsEnabled) {
+        if (session == null || !resolvedSettings.aiAssistantsEnabled) return@LaunchedEffect
+        if (session.aiCommandInterceptor != null) return@LaunchedEffect  // Already set up
+
+        // Create interceptor for this session
+        val interceptor = AICommandInterceptor(
+            detector = aiState.detector,
+            onInstallConfirm = { assistant, originalCommand, clearLine ->
+                // Show confirmation dialog first
+                val terminalWriter: (String) -> Unit = { text ->
+                    session.writeUserInput(text)
+                }
+                installConfirmState = InstallConfirmState(
+                    assistant = assistant,
+                    originalCommand = originalCommand,
+                    clearLine = clearLine,
+                    terminalWriter = terminalWriter
+                )
+            }
+        )
+
+        // Set callback to clear the command line (send Ctrl+U)
+        interceptor.clearLineCallback = {
+            session.writeUserInput("\u0015") // Ctrl+U clears line
+        }
+
+        // Register as CommandStateListener to track shell prompt state (OSC 133)
+        session.terminal.addCommandStateListener(interceptor)
+
+        // Store reference in session for ProperTerminal to access
+        session.aiCommandInterceptor = interceptor
     }
 
     // Render terminal if session exists
@@ -312,6 +385,79 @@ fun EmbeddableTerminal(
 
     // AI Assistant Installation Dialogs (shared composable handles common logic)
     val coroutineScope = rememberCoroutineScope()
+
+    // Confirmation dialog before install (from command interception)
+    installConfirmState?.let { confirmState ->
+        Dialog(
+            onDismissRequest = {
+                confirmState.clearLine()
+                installConfirmState = null
+            }
+        ) {
+            Surface(
+                modifier = Modifier
+                    .width(400.dp)
+                    .wrapContentHeight()
+                    .clip(RoundedCornerShape(12.dp)),
+                color = Color(0xFF1E1E1E),
+                elevation = 8.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Title
+                    Text(
+                        text = "${confirmState.assistant.displayName} is not installed",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    // Message
+                    Text(
+                        text = "Would you like to install ${confirmState.assistant.displayName}?",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 14.sp
+                    )
+                    // Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                confirmState.clearLine()
+                                installConfirmState = null
+                            }
+                        ) {
+                            Text("Cancel", color = Color.White.copy(alpha = 0.7f))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                confirmState.clearLine()
+                                val resolved = AIAssistantLauncher().resolveInstallCommands(confirmState.assistant)
+                                installDialogState = AIInstallDialogParams(
+                                    assistant = confirmState.assistant,
+                                    command = resolved.command,
+                                    npmCommand = resolved.npmFallback,
+                                    terminalWriter = confirmState.terminalWriter,
+                                    commandToRunAfter = confirmState.originalCommand
+                                )
+                                installConfirmState = null
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = Color(0xFF4CAF50)
+                            )
+                        ) {
+                            Text("Install", color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // From context menu
     AIInstallDialogHost(

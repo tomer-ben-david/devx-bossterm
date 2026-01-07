@@ -995,6 +995,14 @@ fun TerminalWithAIToolbar() {
 
 When `aiAssistantsEnabled` is `true` in settings, the context menu includes an "AI Assistants" submenu with install/launch options for all supported assistants. Detection runs when the menu opens.
 
+### Command Interception (OSC 133 Required)
+
+When OSC 133 shell integration is configured, BossTerm detects when you type an AI command (`claude`, `codex`, `gemini`, `opencode`) and shows an install prompt **before** the command runs (if not installed).
+
+**Requirements**: OSC 133 shell integration configured in `.bashrc`/`.zshrc`. See embedding.md for setup instructions.
+
+**Without OSC 133**: Command interception is automatically disabled (graceful fallback to context menu only).
+
 ## Custom Context Menu
 
 Add custom items to the right-click context menu using the `contextMenuItems` parameter.
