@@ -42,6 +42,7 @@ import ai.rever.bossterm.compose.ai.AIInstallDialogParams
 import ai.rever.bossterm.compose.ai.rememberAIAssistantState
 import ai.rever.bossterm.compose.vcs.VersionControlMenuProvider
 import ai.rever.bossterm.compose.shell.ShellCustomizationMenuProvider
+import ai.rever.bossterm.compose.shell.ShellCustomizationUtils
 import ai.rever.bossterm.compose.terminal.BlockingTerminalDataStream
 import ai.rever.bossterm.compose.terminal.PerformanceMode
 import ai.rever.bossterm.compose.ui.ProperTerminal
@@ -225,8 +226,8 @@ fun EmbeddableTerminal(
         SettingsLoader.resolveSettings(settings, settingsPath).withOverrides(settingsOverride)
     }
 
-    // Effective shell command
-    val effectiveCommand = command ?: System.getenv("SHELL") ?: "/bin/sh"
+    // Effective shell command (validates $SHELL exists, falls back to /bin/bash or /bin/sh)
+    val effectiveCommand = command ?: ShellCustomizationUtils.getValidShell()
 
     // Load font from settings.fontName or use default bundled font
     val terminalFont = remember(resolvedSettings.fontName) {

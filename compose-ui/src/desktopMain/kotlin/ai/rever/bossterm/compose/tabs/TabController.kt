@@ -27,6 +27,7 @@ import ai.rever.bossterm.compose.notification.CommandNotificationHandler
 import ai.rever.bossterm.compose.clipboard.ClipboardHandler
 import ai.rever.bossterm.terminal.model.CommandStateListener
 import ai.rever.bossterm.compose.TerminalSession
+import ai.rever.bossterm.compose.shell.ShellCustomizationUtils
 import ai.rever.bossterm.core.typeahead.TerminalTypeAheadManager
 import ai.rever.bossterm.core.typeahead.TypeAheadTerminalModel
 import ai.rever.bossterm.terminal.util.GraphemeBoundaryUtils
@@ -259,8 +260,8 @@ class TabController(
             // NOTE: Only when workingDir is null - login command ignores workingDirectory parameter
             "/usr/bin/login" to listOf("-fp", username)
         } else {
-            // Use provided command or fall back to shell
-            val shellCommand = command ?: System.getenv("SHELL") ?: "/bin/sh"
+            // Use provided command or fall back to a valid shell
+            val shellCommand = command ?: ShellCustomizationUtils.getValidShell()
             // Ensure shell is started as login shell to get proper PATH from /etc/zprofile
             val shellArgs = if (arguments.isEmpty() &&
                 (shellCommand.endsWith("/zsh") || shellCommand.endsWith("/bash") ||
@@ -500,8 +501,8 @@ class TabController(
             // NOTE: Only when workingDir is null - login command ignores workingDirectory parameter
             "/usr/bin/login" to listOf("-fp", username)
         } else {
-            // Use provided command or fall back to shell
-            val shellCommand = command ?: System.getenv("SHELL") ?: "/bin/sh"
+            // Use provided command or fall back to a valid shell
+            val shellCommand = command ?: ShellCustomizationUtils.getValidShell()
             // Ensure shell is started as login shell to get proper PATH from /etc/zprofile
             val shellArgs = if (arguments.isEmpty() &&
                 (shellCommand.endsWith("/zsh") || shellCommand.endsWith("/bash") ||

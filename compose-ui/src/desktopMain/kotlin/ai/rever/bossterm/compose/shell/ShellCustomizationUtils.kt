@@ -8,6 +8,38 @@ import java.io.File
  */
 object ShellCustomizationUtils {
 
+    // ===== Shell Resolution =====
+
+    /**
+     * Get a valid shell command, with fallback if $SHELL is not available.
+     *
+     * Checks in order:
+     * 1. $SHELL environment variable (if the file exists and is executable)
+     * 2. /bin/bash (common default)
+     * 3. /bin/sh (POSIX fallback, always available)
+     *
+     * @return Path to a valid shell executable
+     */
+    fun getValidShell(): String {
+        // Try $SHELL first
+        val envShell = System.getenv("SHELL")
+        if (!envShell.isNullOrBlank()) {
+            val shellFile = File(envShell)
+            if (shellFile.exists() && shellFile.canExecute()) {
+                return envShell
+            }
+        }
+
+        // Fallback to /bin/bash
+        val bash = File("/bin/bash")
+        if (bash.exists() && bash.canExecute()) {
+            return "/bin/bash"
+        }
+
+        // Ultimate fallback to /bin/sh (POSIX, always available)
+        return "/bin/sh"
+    }
+
     // ===== Detection Functions =====
 
     /**
