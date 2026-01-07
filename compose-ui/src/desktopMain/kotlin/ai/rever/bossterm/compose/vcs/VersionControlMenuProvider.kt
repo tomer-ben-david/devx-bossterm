@@ -465,6 +465,34 @@ class VersionControlMenuProvider {
             )
         }
 
+        // Not in a git repository - show only auth and clone options
+        if (!isGitRepo) {
+            return ContextMenuSubmenu(
+                id = "gh_submenu",
+                label = "GitHub CLI",
+                items = listOf(
+                    ContextMenuSection(id = "gh_auth_section", label = "Auth"),
+                    ContextMenuItem(
+                        id = "gh_auth_status",
+                        label = "gh auth status",
+                        action = { terminalWriter("gh auth status\n") }
+                    ),
+                    ContextMenuItem(
+                        id = "gh_auth_login",
+                        label = "gh auth login",
+                        action = { terminalWriter("gh auth login\n") }
+                    ),
+                    ContextMenuSection(id = "gh_repo_section", label = "Repository"),
+                    ContextMenuItem(
+                        id = "gh_repo_clone",
+                        label = "gh repo clone ...",
+                        action = { terminalWriter("gh repo clone ") }
+                    )
+                )
+            )
+        }
+
+        // In a git repository - show full menu
         val ghCommands = listOf(
             ContextMenuSection(id = "gh_auth_section", label = "Auth"),
             ContextMenuItem(
