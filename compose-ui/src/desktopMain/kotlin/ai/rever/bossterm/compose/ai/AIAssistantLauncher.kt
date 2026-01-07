@@ -194,6 +194,14 @@ class AIAssistantLauncher {
         }
 
         /**
+         * Get install command for Starship prompt.
+         * Uses universal curl script that works on macOS, Linux, and WSL.
+         */
+        fun getStarshipInstallCommand(): String {
+            return "curl -sS https://starship.rs/install.sh | sh"
+        }
+
+        /**
          * Get Linux install command with package manager detection.
          * Tries apt, dnf, then pacman in order.
          */

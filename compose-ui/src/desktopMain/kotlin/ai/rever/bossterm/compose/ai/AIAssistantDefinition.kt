@@ -6,8 +6,9 @@ import kotlinx.serialization.Serializable
  * Category of tool definition.
  */
 enum class ToolCategory {
-    AI_ASSISTANT,  // AI coding assistants (claude, gemini, codex, etc.)
-    VERSION_CONTROL  // Version control tools (git, gh)
+    AI_ASSISTANT,        // AI coding assistants (claude, gemini, codex, etc.)
+    VERSION_CONTROL,     // Version control tools (git, gh)
+    SHELL_CUSTOMIZATION  // Shell customization tools (starship, etc.)
 }
 
 /**
@@ -157,6 +158,19 @@ object AIAssistants {
             npmInstallCommand = null,
             websiteUrl = "https://git-scm.com/downloads",
             description = "Distributed version control system"
+        ),
+        // Shell Customization Tools
+        AIAssistantDefinition(
+            id = "starship",
+            displayName = "Starship",
+            command = "starship",
+            category = ToolCategory.SHELL_CUSTOMIZATION,
+            yoloFlag = "",
+            yoloLabel = "",
+            installCommand = AIAssistantLauncher.getStarshipInstallCommand(),
+            npmInstallCommand = null,
+            websiteUrl = "https://starship.rs/",
+            description = "Cross-shell prompt customization"
         )
     )
 

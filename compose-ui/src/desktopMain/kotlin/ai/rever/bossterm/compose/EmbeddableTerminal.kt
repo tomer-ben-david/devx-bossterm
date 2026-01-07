@@ -41,6 +41,7 @@ import ai.rever.bossterm.compose.ai.AIInstallDialogHost
 import ai.rever.bossterm.compose.ai.AIInstallDialogParams
 import ai.rever.bossterm.compose.ai.rememberAIAssistantState
 import ai.rever.bossterm.compose.vcs.VersionControlMenuProvider
+import ai.rever.bossterm.compose.shell.ShellCustomizationMenuProvider
 import ai.rever.bossterm.compose.terminal.BlockingTerminalDataStream
 import ai.rever.bossterm.compose.terminal.PerformanceMode
 import ai.rever.bossterm.compose.ui.ProperTerminal
@@ -243,6 +244,10 @@ fun EmbeddableTerminal(
     val vcsMenuProvider = remember { VersionControlMenuProvider() }
     val vcsStatusHolder = remember { AtomicReference<Pair<Boolean, Boolean>?>(null) }
 
+    // Shell Customization menu provider (Starship, etc.)
+    val shellMenuProvider = remember { ShellCustomizationMenuProvider() }
+    val shellStatusHolder = remember { AtomicReference<Map<String, Boolean>?>(null) }
+
     // State for AI assistant installation dialog (uses shared AIInstallDialogParams)
     var installDialogState by remember { mutableStateOf<AIInstallDialogParams?>(null) }
 
@@ -382,6 +387,19 @@ fun EmbeddableTerminal(
                 )
                 items = items + vcsItems
 
+                // Add Shell Customization menu items (Starship, etc.)
+                val shellItems = shellMenuProvider.getMenuItems(
+                    terminalWriter = terminalWriter,
+                    onInstallRequest = { toolId, command, npmCommand ->
+                        val tool = AIAssistants.findById(toolId)
+                        if (tool != null) {
+                            installDialogState = AIInstallDialogParams(tool, command, npmCommand, terminalWriter)
+                        }
+                    },
+                    statusOverride = shellStatusHolder.get()
+                )
+                items = items + shellItems
+
                 items
             },
             onContextMenuOpen = onContextMenuOpen,
@@ -401,6 +419,9 @@ fun EmbeddableTerminal(
                     ?: session.processHandle.value?.getWorkingDirectory()
                 vcsMenuProvider.refreshStatus(cwd)
                 vcsStatusHolder.set(vcsMenuProvider.getStatus())
+                // Refresh Shell Customization status
+                shellMenuProvider.refreshStatus()
+                shellStatusHolder.set(mapOf("starship" to (shellMenuProvider.getStatus() ?: false)))
             },
             onLinkClick = onLinkClick,
             hyperlinkRegistry = hyperlinkRegistry,
