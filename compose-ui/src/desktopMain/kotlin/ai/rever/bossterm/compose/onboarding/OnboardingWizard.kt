@@ -247,12 +247,16 @@ fun OnboardingWizard(
                                 OnboardingStep.Complete -> CompleteStep(
                                     onRelaunch = {
                                         markCompleted()
-                                        // Request app restart using /proc/self/cmdline on Linux
+                                        // Request app restart - cross-platform
                                         try {
-                                            val cmdlineFile = java.io.File("/proc/self/cmdline")
-                                            if (cmdlineFile.exists()) {
-                                                val cmdline = cmdlineFile.readText().replace('\u0000', ' ').trim()
-                                                Runtime.getRuntime().exec(arrayOf("bash", "-c", "sleep 0.5 && $cmdline &"))
+                                            val restartCommand = getRestartCommand()
+                                            if (restartCommand != null) {
+                                                val osName = System.getProperty("os.name") ?: ""
+                                                if (osName.lowercase().contains("windows")) {
+                                                    Runtime.getRuntime().exec(arrayOf("cmd", "/c", "timeout /t 1 && $restartCommand"))
+                                                } else {
+                                                    Runtime.getRuntime().exec(arrayOf("bash", "-c", "sleep 0.5 && $restartCommand &"))
+                                                }
                                             }
                                         } catch (e: Exception) {
                                             // Fallback: just exit without restart
@@ -493,6 +497,67 @@ private fun isCommandInstalled(command: String): Boolean {
         process?.inputStream?.close()
         process?.errorStream?.close()
         process?.outputStream?.close()
+    }
+}
+
+/**
+ * Get the command to restart the current application.
+ * Cross-platform: works on Linux, macOS, and Windows.
+ *
+ * @return The restart command string, or null if unable to determine
+ */
+private fun getRestartCommand(): String? {
+    val osName = System.getProperty("os.name") ?: return null
+
+    return try {
+        when {
+            // Linux: Use /proc/self/cmdline
+            osName.lowercase().contains("linux") -> {
+                val cmdlineFile = File("/proc/self/cmdline")
+                if (cmdlineFile.exists()) {
+                    cmdlineFile.readText().replace('\u0000', ' ').trim().takeIf { it.isNotEmpty() }
+                } else null
+            }
+
+            // macOS: Use ps command to get full command
+            osName.lowercase().contains("mac") -> {
+                val pid = ProcessHandle.current().pid()
+                var process: Process? = null
+                try {
+                    process = ProcessBuilder("ps", "-p", pid.toString(), "-o", "command=")
+                        .redirectErrorStream(true)
+                        .start()
+                    val output = process.inputStream.bufferedReader().use { it.readText().trim() }
+                    val completed = process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+                    if (!completed) {
+                        process.destroyForcibly()
+                        null
+                    } else if (process.exitValue() == 0 && output.isNotEmpty()) {
+                        output
+                    } else null
+                } finally {
+                    process?.inputStream?.close()
+                    process?.errorStream?.close()
+                    process?.outputStream?.close()
+                }
+            }
+
+            // Windows: Use ProcessHandle info
+            osName.lowercase().contains("windows") -> {
+                val info = ProcessHandle.current().info()
+                val command = info.command().orElse(null) ?: return null
+                val args = info.arguments().orElse(emptyArray())
+                if (args.isNotEmpty()) {
+                    "\"$command\" ${args.joinToString(" ") { "\"$it\"" }}"
+                } else {
+                    "\"$command\""
+                }
+            }
+
+            else -> null
+        }
+    } catch (e: Exception) {
+        null
     }
 }
 
