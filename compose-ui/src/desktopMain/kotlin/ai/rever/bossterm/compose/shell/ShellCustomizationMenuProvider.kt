@@ -140,44 +140,48 @@ class ShellCustomizationMenuProvider {
             shellItems.add(buildStarshipMenu(terminalWriter, onInstallRequest))
         }
 
-        // Oh My Zsh menu
-        if (!isOhMyZshInstalled) {
-            // Not installed: Install + Learn More submenu
-            shellItems.add(
-                ContextMenuSubmenu(
-                    id = "ohmyzsh_submenu",
-                    label = "Oh My Zsh",
-                    items = listOf(
-                        ContextMenuItem(
-                            id = "ohmyzsh_install",
-                            label = "Install",
-                            action = {
-                                if (onInstallRequest != null) {
-                                    onInstallRequest("oh-my-zsh", AIAssistantLauncher.getOhMyZshInstallCommand(), null)
-                                } else {
-                                    UrlOpener.open("https://ohmyz.sh/")
+        // Check if Zsh is installed (needed for Oh My Zsh)
+        val isZshInstalled = statusOverride?.get("zsh")
+            ?: (zshInstalled ?: isCommandInstalled("zsh"))
+
+        // Oh My Zsh menu (only show if Zsh is installed)
+        if (isZshInstalled) {
+            if (!isOhMyZshInstalled) {
+                // Not installed: Install + Learn More submenu
+                shellItems.add(
+                    ContextMenuSubmenu(
+                        id = "ohmyzsh_submenu",
+                        label = "Oh My Zsh",
+                        items = listOf(
+                            ContextMenuItem(
+                                id = "ohmyzsh_install",
+                                label = "Install",
+                                action = {
+                                    if (onInstallRequest != null) {
+                                        onInstallRequest("oh-my-zsh", AIAssistantLauncher.getOhMyZshInstallCommand(), null)
+                                    } else {
+                                        UrlOpener.open("https://ohmyz.sh/")
+                                    }
                                 }
-                            }
-                        ),
-                        ContextMenuItem(
-                            id = "ohmyzsh_learnmore",
-                            label = "Learn More",
-                            action = { UrlOpener.open("https://ohmyz.sh/") }
+                            ),
+                            ContextMenuItem(
+                                id = "ohmyzsh_learnmore",
+                                label = "Learn More",
+                                action = { UrlOpener.open("https://ohmyz.sh/") }
+                            )
                         )
                     )
                 )
-            )
-        } else {
-            // Installed: Configuration submenu
-            shellItems.add(buildOhMyZshMenu(terminalWriter, onInstallRequest))
+            } else {
+                // Installed: Configuration submenu
+                shellItems.add(buildOhMyZshMenu(terminalWriter, onInstallRequest))
+            }
         }
 
         // Shells section separator
         shellItems.add(ContextMenuSection(id = "shells_section", label = "Shells"))
 
         // Zsh menu
-        val isZshInstalled = statusOverride?.get("zsh")
-            ?: (zshInstalled ?: isCommandInstalled("zsh"))
         if (!isZshInstalled) {
             shellItems.add(
                 ContextMenuItem(
