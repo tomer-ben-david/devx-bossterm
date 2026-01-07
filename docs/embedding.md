@@ -949,6 +949,10 @@ state.cancelAIInstallation()
 
 // === VCS Tools ===
 
+// Check if Git is installed (uses same API as AI assistants)
+val gitInstalled = state.isAIAssistantInstalled("git")
+val ghInstalled = state.isAIAssistantInstalled("gh")
+
 // Install Git
 state.installGit()
 // Opens installation dialog for Git
@@ -1003,15 +1007,19 @@ fun TerminalWithAIMenu() {
 
 ### Built-in Context Menu Integration
 
-When `aiAssistantsEnabled` is `true` in settings (default), the context menu automatically includes an "AI Assistants" submenu with:
-- **Installed assistants**: Direct launch option
-- **Uninstalled assistants**: Install options (Script, npm) and Learn More link
+When `aiAssistantsEnabled` is `true` in settings (default), the context menu automatically includes:
+- **AI Assistants** submenu: Installed assistants show direct launch option; uninstalled show Install options
+- **Version Control** submenu: Git commands, branch switching, and VCS tool installation
+
+**Note**: The `aiAssistantsEnabled` setting controls both AI assistants and VCS tools. There is no separate VCS-specific setting; they share the same enable/disable flag.
 
 The detection runs asynchronously when the context menu opens, ensuring up-to-date installation status.
 
 ### Command Interception (OSC 133 Required)
 
-When OSC 133 shell integration is configured, BossTerm can detect when you type an AI assistant command (like `claude`, `codex`, `gemini`, `opencode`) and show an install prompt **before** the shell tries to execute it.
+When OSC 133 shell integration is configured, BossTerm can detect when you type an AI assistant or VCS tool command (like `claude`, `codex`, `gemini`, `opencode`, `git`, `gh`) and show an install prompt **before** the shell tries to execute it.
+
+**VCS Tools Note**: Command interception works identically for VCS tools (git, gh) as it does for AI assistants. They use the same detection and dialog mechanism.
 
 **Requirements**:
 - OSC 133 shell integration must be configured in your shell (`.bashrc` / `.zshrc`)
