@@ -297,21 +297,21 @@ class ShellCustomizationMenuProvider {
                     id = "starship_setup_bash",
                     label = "Setup for Bash",
                     action = {
-                        terminalWriter("echo 'eval \"\$(starship init bash)\"' >> ~/.bashrc && echo '✓ Added to ~/.bashrc - restart shell or run: source ~/.bashrc'\n")
+                        terminalWriter("echo 'eval \"\$(starship init bash)\"' >> ~/.bashrc && echo '✓ Added to ~/.bashrc' && source ~/.bashrc\n")
                     }
                 ),
                 ContextMenuItem(
                     id = "starship_setup_zsh",
                     label = "Setup for Zsh",
                     action = {
-                        terminalWriter("echo 'eval \"\$(starship init zsh)\"' >> ~/.zshrc && echo '✓ Added to ~/.zshrc - restart shell or run: source ~/.zshrc'\n")
+                        terminalWriter("echo 'eval \"\$(starship init zsh)\"' >> ~/.zshrc && echo '✓ Added to ~/.zshrc' && source ~/.zshrc\n")
                     }
                 ),
                 ContextMenuItem(
                     id = "starship_setup_fish",
                     label = "Setup for Fish",
                     action = {
-                        terminalWriter("echo 'starship init fish | source' >> ~/.config/fish/config.fish && echo '✓ Added to config.fish - restart shell'\n")
+                        terminalWriter("echo 'starship init fish | source' >> ~/.config/fish/config.fish && echo '✓ Added to config.fish' && source ~/.config/fish/config.fish\n")
                     }
                 ),
 
