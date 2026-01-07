@@ -504,7 +504,12 @@ jobs:
 
   update-homebrew:
     needs: [prepare-version, create-release]
-    if: ${{ github.event.inputs.publish_only != 'true' }}
+    # Run if: not publish_only AND create-release succeeded
+    # Using always() to prevent auto-skip when upstream jobs (like snap) are skipped
+    if: |
+      always() &&
+      github.event.inputs.publish_only != 'true' &&
+      needs.create-release.result == 'success'
     runs-on: ubuntu-latest
 
     steps:
