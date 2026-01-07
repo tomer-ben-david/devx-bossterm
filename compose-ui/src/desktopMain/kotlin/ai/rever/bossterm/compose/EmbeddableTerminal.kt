@@ -1,7 +1,28 @@
 package ai.rever.bossterm.compose
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Button
+import androidx.compose.material.ButtonDefaults
+import androidx.compose.material.Surface
+import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -10,6 +31,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicReference
+import ai.rever.bossterm.compose.ai.AIAssistantDefinition
+import ai.rever.bossterm.compose.ai.AIAssistantDetector
+import ai.rever.bossterm.compose.ai.AIAssistantLauncher
+import ai.rever.bossterm.compose.ai.AIAssistants
+import ai.rever.bossterm.compose.ai.AICommandInterceptor
+import ai.rever.bossterm.compose.ai.AIInstallDialogHost
+import ai.rever.bossterm.compose.ai.AIInstallDialogParams
+import ai.rever.bossterm.compose.ai.rememberAIAssistantState
+import ai.rever.bossterm.compose.vcs.VersionControlMenuProvider
 import ai.rever.bossterm.compose.terminal.BlockingTerminalDataStream
 import ai.rever.bossterm.compose.terminal.PerformanceMode
 import ai.rever.bossterm.compose.ui.ProperTerminal
@@ -201,6 +232,29 @@ fun EmbeddableTerminal(
         loadTerminalFont(resolvedSettings.fontName)
     }
 
+    // AI Assistant integration (issue #225)
+    val aiState = rememberAIAssistantState(resolvedSettings)
+
+    // Thread-safe holder for detection results - avoids Compose state recomposition issues
+    // Uses AtomicReference for safe access from suspend functions
+    val detectionResultsHolder = remember { AtomicReference<Map<String, Boolean>?>(null) }
+
+    // Version Control menu provider (Git and GitHub CLI)
+    val vcsMenuProvider = remember { VersionControlMenuProvider() }
+    val vcsStatusHolder = remember { AtomicReference<Pair<Boolean, Boolean>?>(null) }
+
+    // State for AI assistant installation dialog (uses shared AIInstallDialogParams)
+    var installDialogState by remember { mutableStateOf<AIInstallDialogParams?>(null) }
+
+    // State for AI assistant install confirmation dialog (shown before install)
+    data class InstallConfirmState(
+        val assistant: AIAssistantDefinition,
+        val originalCommand: String,
+        val clearLine: () -> Unit,
+        val terminalWriter: (String) -> Unit
+    )
+    var installConfirmState by remember { mutableStateOf<InstallConfirmState?>(null) }
+
     // Initialize session if not already done (session lives in state, not composable)
     LaunchedEffect(effectiveState, resolvedSettings, effectiveCommand) {
         if (effectiveState.session == null) {
@@ -239,6 +293,48 @@ fun EmbeddableTerminal(
         }
     }
 
+    // Run AI assistant detection once on startup (for command interception)
+    LaunchedEffect(resolvedSettings.aiAssistantsEnabled) {
+        if (resolvedSettings.aiAssistantsEnabled) {
+            aiState.detector.detectAll()
+        }
+    }
+
+    // Set up AI command interceptor when session is available (detects typing "claude", "aider", etc.)
+    // When an AI command is typed and the assistant is not installed, shows install prompt
+    LaunchedEffect(session, resolvedSettings.aiAssistantsEnabled) {
+        if (session == null || !resolvedSettings.aiAssistantsEnabled) return@LaunchedEffect
+        if (session.aiCommandInterceptor != null) return@LaunchedEffect  // Already set up
+
+        // Create interceptor for this session
+        val interceptor = AICommandInterceptor(
+            detector = aiState.detector,
+            onInstallConfirm = { assistant, originalCommand, clearLine ->
+                // Show confirmation dialog first
+                val terminalWriter: (String) -> Unit = { text ->
+                    session.writeUserInput(text)
+                }
+                installConfirmState = InstallConfirmState(
+                    assistant = assistant,
+                    originalCommand = originalCommand,
+                    clearLine = clearLine,
+                    terminalWriter = terminalWriter
+                )
+            }
+        )
+
+        // Set callback to clear the command line (send Ctrl+U)
+        interceptor.clearLineCallback = {
+            session.writeUserInput("\u0015") // Ctrl+U clears line
+        }
+
+        // Register as CommandStateListener to track shell prompt state (OSC 133)
+        session.terminal.addCommandStateListener(interceptor)
+
+        // Store reference in session for ProperTerminal to access
+        session.aiCommandInterceptor = interceptor
+    }
+
     // Render terminal if session exists
     if (session != null) {
         ProperTerminal(
@@ -249,14 +345,160 @@ fun EmbeddableTerminal(
             onNewWindow = onNewWindow,
             enableDebugPanel = false,  // Hide debug panel in embedded mode
             customContextMenuItems = contextMenuItems,
-            customContextMenuItemsProvider = contextMenuItemsProvider,
+            // Combine user-provided items with AI assistant and VCS items
+            customContextMenuItemsProvider = {
+                val userItems = contextMenuItemsProvider?.invoke() ?: contextMenuItems
+                var items = userItems
+
+                // Add AI assistant menu items
+                if (resolvedSettings.aiAssistantsEnabled) {
+                    // Get working directory from session for launching AI assistants
+                    val workingDir = session.workingDirectory?.value
+                    val terminalWriter: (String) -> Unit = { text -> session.writeUserInput(text) }
+                    val aiItems = aiState.menuProvider.getMenuItems(
+                        terminalWriter = terminalWriter,
+                        onInstallRequest = { assistant, command, npmCommand ->
+                            installDialogState = AIInstallDialogParams(assistant, command, npmCommand, terminalWriter)
+                        },
+                        workingDirectory = workingDir,
+                        configs = resolvedSettings.aiAssistantConfigs,
+                        statusOverride = detectionResultsHolder.get()
+                    )
+                    items = items + aiItems
+                }
+
+                // Add Version Control menu items
+                val terminalWriter: (String) -> Unit = { text -> session.writeUserInput(text) }
+                val vcsItems = vcsMenuProvider.getMenuItems(
+                    terminalWriter = terminalWriter,
+                    onInstallRequest = { toolId, command, npmCommand ->
+                        // Find the tool definition and show install dialog
+                        val tool = AIAssistants.findById(toolId)
+                        if (tool != null) {
+                            installDialogState = AIInstallDialogParams(tool, command, npmCommand, terminalWriter)
+                        }
+                    },
+                    statusOverride = vcsStatusHolder.get()
+                )
+                items = items + vcsItems
+
+                items
+            },
             onContextMenuOpen = onContextMenuOpen,
-            onContextMenuOpenAsync = onContextMenuOpenAsync,
+            // Combine user async callback with AI detection and VCS status refresh
+            onContextMenuOpenAsync = {
+                // Run user callback first if provided
+                onContextMenuOpenAsync?.invoke()
+                // Refresh AI assistant detection before showing menu
+                // Store results in shared holder for immediate access by customContextMenuItemsProvider
+                if (resolvedSettings.aiAssistantsEnabled) {
+                    val freshStatus = aiState.detector.detectAll()
+                    detectionResultsHolder.set(freshStatus)
+                }
+                // Refresh VCS status with current working directory
+                // Try OSC 7 tracked directory first, fallback to reading from process
+                val cwd = session.workingDirectory?.value
+                    ?: session.processHandle.value?.getWorkingDirectory()
+                vcsMenuProvider.refreshStatus(cwd)
+                vcsStatusHolder.set(vcsMenuProvider.getStatus())
+            },
             onLinkClick = onLinkClick,
             hyperlinkRegistry = hyperlinkRegistry,
             modifier = modifier
         )
     }
+
+    // AI Assistant Installation Dialogs (shared composable handles common logic)
+    val coroutineScope = rememberCoroutineScope()
+
+    // Confirmation dialog before install (from command interception)
+    installConfirmState?.let { confirmState ->
+        Dialog(
+            onDismissRequest = {
+                confirmState.clearLine()
+                installConfirmState = null
+            }
+        ) {
+            Surface(
+                modifier = Modifier
+                    .width(400.dp)
+                    .wrapContentHeight()
+                    .clip(RoundedCornerShape(12.dp)),
+                color = Color(0xFF1E1E1E),
+                elevation = 8.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Title
+                    Text(
+                        text = "${confirmState.assistant.displayName} is not installed",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    // Message
+                    Text(
+                        text = "Would you like to install ${confirmState.assistant.displayName}?",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 14.sp
+                    )
+                    // Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                confirmState.clearLine()
+                                installConfirmState = null
+                            }
+                        ) {
+                            Text("Cancel", color = Color.White.copy(alpha = 0.7f))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                confirmState.clearLine()
+                                val resolved = AIAssistantLauncher().resolveInstallCommands(confirmState.assistant)
+                                installDialogState = AIInstallDialogParams(
+                                    assistant = confirmState.assistant,
+                                    command = resolved.command,
+                                    npmCommand = resolved.npmFallback,
+                                    terminalWriter = confirmState.terminalWriter,
+                                    commandToRunAfter = confirmState.originalCommand
+                                )
+                                installConfirmState = null
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = Color(0xFF4CAF50)
+                            )
+                        ) {
+                            Text("Install", color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // From context menu
+    AIInstallDialogHost(
+        params = installDialogState,
+        coroutineScope = coroutineScope,
+        detector = aiState.detector,
+        onDismiss = { installDialogState = null }
+    )
+
+    // From programmatic API
+    AIInstallDialogHost(
+        params = effectiveState.aiInstallRequest,
+        coroutineScope = coroutineScope,
+        detector = aiState.detector,
+        onDismiss = { effectiveState.cancelAIInstallation() }
+    )
 }
 
 /**
@@ -488,6 +730,89 @@ class EmbeddableTerminalState {
             s.searchVisible.value = true
         }
     }
+
+    // ===== AI Assistant Installation API =====
+
+    /**
+     * Internal state for AI assistant installation request.
+     * Observed by the EmbeddableTerminal composable to show the install dialog.
+     */
+    internal var aiInstallRequest by mutableStateOf<AIInstallDialogParams?>(null)
+
+    /**
+     * Get list of available AI assistant IDs.
+     *
+     * @return List of assistant IDs (e.g., "claude-code", "codex", "gemini-cli", "opencode")
+     */
+    fun getAvailableAIAssistants(): List<String> = AIAssistants.AI_ASSISTANTS.map { it.id }
+
+    /**
+     * Get AI assistant definition by ID.
+     *
+     * @param assistantId The assistant ID (e.g., "claude-code")
+     * @return The assistant definition, or null if not found
+     */
+    fun getAIAssistant(assistantId: String): AIAssistantDefinition? =
+        AIAssistants.findById(assistantId)
+
+    /**
+     * Check if an AI assistant is installed.
+     *
+     * @param assistantId The assistant ID to check
+     * @return true if installed, false otherwise
+     */
+    suspend fun isAIAssistantInstalled(assistantId: String): Boolean {
+        val assistant = AIAssistants.findById(assistantId) ?: return false
+        return AIAssistantDetector().detectSingle(assistant)
+    }
+
+    /**
+     * Trigger installation of an AI assistant.
+     * Opens the installation dialog in the terminal.
+     *
+     * @param assistantId The assistant ID to install (e.g., "claude-code", "codex", "gemini-cli", "opencode")
+     * @param useNpm If true, use npm installation; if false (default), use script installation with npm fallback
+     * @return true if installation was triggered, false if assistant not found or session not ready
+     */
+    fun installAIAssistant(assistantId: String, useNpm: Boolean = false): Boolean {
+        val assistant = AIAssistants.findById(assistantId) ?: return false
+        val currentSession = session ?: return false
+
+        val resolved = AIAssistantLauncher().resolveInstallCommands(assistant, useNpm)
+
+        aiInstallRequest = AIInstallDialogParams(
+            assistant = assistant,
+            command = resolved.command,
+            npmCommand = resolved.npmFallback,
+            terminalWriter = { text -> currentSession.writeUserInput(text) }
+        )
+        return true
+    }
+
+    /**
+     * Cancel any pending AI assistant installation request.
+     */
+    fun cancelAIInstallation() {
+        aiInstallRequest = null
+    }
+
+    // ==================== VCS Tool Installation ====================
+
+    /**
+     * Trigger installation of Git.
+     * Opens the installation dialog in the terminal.
+     *
+     * @return true if installation was triggered, false if no active session
+     */
+    fun installGit(): Boolean = installAIAssistant("git")
+
+    /**
+     * Trigger installation of GitHub CLI (gh).
+     * Opens the installation dialog in the terminal.
+     *
+     * @return true if installation was triggered, false if no active session
+     */
+    fun installGitHubCLI(): Boolean = installAIAssistant("gh")
 }
 
 /**
@@ -707,9 +1032,26 @@ private suspend fun initializeProcess(
 
                     // Register one-shot listener BEFORE sending command
                     // (must be registered before command executes to catch fast commands)
+                    // Important: Track B->D sequence to avoid false positives from shell startup
                     if (onInitialCommandComplete != null) {
                         val completionListener = object : CommandStateListener {
+                            @Volatile
+                            private var commandStarted = false
+
+                            override fun onCommandStarted() {
+                                // Only count the first B after we send the command
+                                if (!commandStarted) {
+                                    println("DEBUG: Initial command started (OSC 133;B)")
+                                    commandStarted = true
+                                }
+                            }
+
                             override fun onCommandFinished(exitCode: Int) {
+                                // Only fire callback if we saw a B first (command actually started)
+                                if (!commandStarted) {
+                                    println("DEBUG: Ignoring OSC 133;D (no preceding B) - exitCode=$exitCode")
+                                    return
+                                }
                                 try {
                                     println("DEBUG: Initial command completed with exit code: $exitCode")
                                     // Fire callback once with success status and exit code

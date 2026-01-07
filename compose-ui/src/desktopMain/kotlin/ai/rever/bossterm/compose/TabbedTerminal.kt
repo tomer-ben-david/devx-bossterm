@@ -1,15 +1,44 @@
 package ai.rever.bossterm.compose
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Button
+import androidx.compose.material.ButtonDefaults
+import androidx.compose.material.Surface
+import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import ai.rever.bossterm.compose.ContextMenuElement
+import ai.rever.bossterm.compose.ai.AIAssistantDefinition
+import ai.rever.bossterm.compose.ai.AIAssistants
+import ai.rever.bossterm.compose.ai.AICommandInterceptor
+import ai.rever.bossterm.compose.ai.AIAssistantLauncher
+import ai.rever.bossterm.compose.ai.AIInstallDialogHost
+import ai.rever.bossterm.compose.ai.AIInstallDialogParams
+import ai.rever.bossterm.compose.ai.rememberAIAssistantState
+import ai.rever.bossterm.compose.vcs.VersionControlMenuProvider
 import ai.rever.bossterm.compose.menu.MenuActions
+import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicReference
 import ai.rever.bossterm.compose.util.loadTerminalFont
 import ai.rever.bossterm.compose.settings.SettingsManager
 import ai.rever.bossterm.compose.settings.TerminalSettingsOverride
@@ -135,6 +164,32 @@ fun TabbedTerminal(
     val sharedFont = remember(settings.fontName) {
         loadTerminalFont(settings.fontName)
     }
+
+    // AI Assistant integration (issue #225)
+    val aiState = rememberAIAssistantState(settings)
+
+    // Thread-safe holder for detection results - avoids Compose state recomposition issues
+    // Uses AtomicReference for safe access from suspend functions
+    val detectionResultsHolder = remember { AtomicReference<Map<String, Boolean>?>(null) }
+
+    // Version Control menu provider (Git and GitHub CLI)
+    val vcsMenuProvider = remember { VersionControlMenuProvider() }
+    val vcsStatusHolder = remember { AtomicReference<Pair<Boolean, Boolean>?>(null) }
+
+    // State for AI assistant installation dialog (uses shared AIInstallDialogParams)
+    var installDialogState by remember { mutableStateOf<AIInstallDialogParams?>(null) }
+
+    // State for AI assistant install confirmation dialog (shown before install)
+    data class InstallConfirmState(
+        val assistant: AIAssistantDefinition,
+        val originalCommand: String,
+        val clearLine: () -> Unit,
+        val terminalWriter: (String) -> Unit
+    )
+    var installConfirmState by remember { mutableStateOf<InstallConfirmState?>(null) }
+
+    // Track which tabs have interceptors set up
+    val interceptorSetupTracker = remember { mutableSetOf<String>() }
 
     // Initialize external state if provided (only once)
     if (state != null && !state.isInitialized) {
@@ -318,6 +373,62 @@ fun TabbedTerminal(
                 )
             }
         }
+    }
+
+    // Run AI assistant detection once on startup (for command interception)
+    LaunchedEffect(settings.aiAssistantsEnabled) {
+        if (settings.aiAssistantsEnabled) {
+            aiState.detector.detectAll()
+        }
+    }
+
+    // Set up AI command interceptors for all tabs (detects typing "claude", "aider", etc.)
+    // When an AI command is typed and the assistant is not installed, shows install prompt
+    LaunchedEffect(tabController.tabs.size, settings.aiAssistantsEnabled) {
+        if (!settings.aiAssistantsEnabled) return@LaunchedEffect
+
+        for (tab in tabController.tabs) {
+            // Skip if already set up
+            if (tab.id in interceptorSetupTracker) continue
+            if (tab.aiCommandInterceptor != null) {
+                interceptorSetupTracker.add(tab.id)
+                continue
+            }
+
+            // Create interceptor for this tab
+            val interceptor = AICommandInterceptor(
+                detector = aiState.detector,
+                onInstallConfirm = { assistant, originalCommand, clearLine ->
+                    // Show confirmation dialog first
+                    val terminalWriter: (String) -> Unit = { text ->
+                        tab.writeUserInput(text)
+                    }
+                    installConfirmState = InstallConfirmState(
+                        assistant = assistant,
+                        originalCommand = originalCommand,
+                        clearLine = clearLine,
+                        terminalWriter = terminalWriter
+                    )
+                }
+            )
+
+            // Set callback to clear the command line (send Ctrl+U)
+            interceptor.clearLineCallback = {
+                tab.writeUserInput("\u0015") // Ctrl+U clears line
+            }
+
+            // Register as CommandStateListener to track shell prompt state (OSC 133)
+            tab.terminal.addCommandStateListener(interceptor)
+
+            // Store reference in tab for ProperTerminal to access
+            tab.aiCommandInterceptor = interceptor
+
+            interceptorSetupTracker.add(tab.id)
+        }
+
+        // Clean up tracker for closed tabs
+        val currentTabIds = tabController.tabs.map { it.id }.toSet()
+        interceptorSetupTracker.removeAll { it !in currentTabIds }
     }
 
     // Cleanup split states when tabs are closed
@@ -567,9 +678,68 @@ fun TabbedTerminal(
                     }
                 },
                 customContextMenuItems = contextMenuItems,
-                customContextMenuItemsProvider = contextMenuItemsProvider,
+                // Combine user-provided items with AI assistant and VCS items
+                customContextMenuItemsProvider = {
+                    val userItems = contextMenuItemsProvider?.invoke() ?: contextMenuItems
+                    var items = userItems
+
+                    // Add AI assistant menu items
+                    if (settings.aiAssistantsEnabled) {
+                        // Get working directory from focused session for launching AI assistants
+                        val workingDir = splitState.getFocusedSession()?.workingDirectory?.value
+                        val terminalWriter: (String) -> Unit = { text ->
+                            splitState.getFocusedSession()?.writeUserInput(text)
+                        }
+                        val aiItems = aiState.menuProvider.getMenuItems(
+                            terminalWriter = terminalWriter,
+                            onInstallRequest = { assistant, command, npmCommand ->
+                                installDialogState = AIInstallDialogParams(assistant, command, npmCommand, terminalWriter)
+                            },
+                            workingDirectory = workingDir,
+                            configs = settings.aiAssistantConfigs,
+                            statusOverride = detectionResultsHolder.get()
+                        )
+                        items = items + aiItems
+                    }
+
+                    // Add Version Control menu items
+                    val terminalWriter: (String) -> Unit = { text ->
+                        splitState.getFocusedSession()?.writeUserInput(text)
+                    }
+                    val vcsItems = vcsMenuProvider.getMenuItems(
+                        terminalWriter = terminalWriter,
+                        onInstallRequest = { toolId, command, npmCommand ->
+                            // Find the tool definition and show install dialog
+                            val tool = AIAssistants.findById(toolId)
+                            if (tool != null) {
+                                installDialogState = AIInstallDialogParams(tool, command, npmCommand, terminalWriter)
+                            }
+                        },
+                        statusOverride = vcsStatusHolder.get()
+                    )
+                    items = items + vcsItems
+
+                    items
+                },
                 onContextMenuOpen = onContextMenuOpen,
-                onContextMenuOpenAsync = onContextMenuOpenAsync,
+                // Combine user async callback with AI detection and VCS status refresh
+                onContextMenuOpenAsync = {
+                    // Run user callback first if provided
+                    onContextMenuOpenAsync?.invoke()
+                    // Refresh AI assistant detection before showing menu
+                    // Store results in shared holder for immediate access by customContextMenuItemsProvider
+                    if (settings.aiAssistantsEnabled) {
+                        val freshStatus = aiState.detector.detectAll()
+                        detectionResultsHolder.set(freshStatus)
+                    }
+                    // Refresh VCS status with current working directory
+                    // Try OSC 7 tracked directory first, fallback to reading from process
+                    val session = splitState.getFocusedSession()
+                    val cwd = session?.workingDirectory?.value
+                        ?: session?.processHandle?.value?.getWorkingDirectory()
+                    vcsMenuProvider.refreshStatus(cwd)
+                    vcsStatusHolder.set(vcsMenuProvider.getStatus())
+                },
                 hyperlinkRegistry = hyperlinkRegistry,
                 modifier = Modifier.fillMaxSize()
             )
@@ -584,5 +754,99 @@ fun TabbedTerminal(
                     .background(Color.White.copy(alpha = 0.15f))
             )
         }
+    }
+
+    // AI Assistant Installation Dialogs (shared composable handles common logic)
+    val coroutineScope = rememberCoroutineScope()
+
+    // Confirmation dialog before install (from command interception)
+    installConfirmState?.let { confirmState ->
+        Dialog(
+            onDismissRequest = {
+                confirmState.clearLine()
+                installConfirmState = null
+            }
+        ) {
+            Surface(
+                modifier = Modifier
+                    .width(400.dp)
+                    .wrapContentHeight()
+                    .clip(RoundedCornerShape(12.dp)),
+                color = Color(0xFF1E1E1E),
+                elevation = 8.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Title
+                    Text(
+                        text = "${confirmState.assistant.displayName} is not installed",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    // Message
+                    Text(
+                        text = "Would you like to install ${confirmState.assistant.displayName}?",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 14.sp
+                    )
+                    // Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                confirmState.clearLine()
+                                installConfirmState = null
+                            }
+                        ) {
+                            Text("Cancel", color = Color.White.copy(alpha = 0.7f))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                confirmState.clearLine()
+                                val resolved = AIAssistantLauncher().resolveInstallCommands(confirmState.assistant)
+                                installDialogState = AIInstallDialogParams(
+                                    assistant = confirmState.assistant,
+                                    command = resolved.command,
+                                    npmCommand = resolved.npmFallback,
+                                    terminalWriter = confirmState.terminalWriter,
+                                    commandToRunAfter = confirmState.originalCommand
+                                )
+                                installConfirmState = null
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = Color(0xFF4CAF50)
+                            )
+                        ) {
+                            Text("Install", color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // From context menu
+    AIInstallDialogHost(
+        params = installDialogState,
+        coroutineScope = coroutineScope,
+        detector = aiState.detector,
+        onDismiss = { installDialogState = null }
+    )
+
+    // From programmatic API
+    state?.let { s ->
+        AIInstallDialogHost(
+            params = s.aiInstallRequest,
+            coroutineScope = coroutineScope,
+            detector = aiState.detector,
+            onDismiss = { s.cancelAIInstallation() }
+        )
     }
 }

@@ -1403,6 +1403,18 @@ fun ProperTerminal(
               }
 
               if (text.isNotEmpty()) {
+                // AI Command Interception: Check if typing an AI assistant command
+                // For single characters, let the interceptor track input and potentially
+                // consume Enter if it detects an uninstalled AI assistant command
+                val interceptor = tab.aiCommandInterceptor
+                if (interceptor != null && text.length == 1) {
+                  if (interceptor.onCharacterTyped(text[0])) {
+                    // Character consumed by interceptor (e.g., Enter on AI command)
+                    // Don't send to PTY - interceptor triggered install prompt
+                    return@launch
+                  }
+                }
+
                 // Auto-scroll to cursor when user types (standard terminal behavior)
                 // If scrolled into history, snap back to current screen so user sees their input
                 if (settings.scrollToBottomOnTyping) {
