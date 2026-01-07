@@ -61,18 +61,64 @@ Alacritty  ███████████████████████
 
 ## Installation
 
-### macOS (Homebrew)
+### Universal Installer (Recommended)
+
+[![Install Script](https://github.com/kshivang/BossTerm/actions/workflows/test-install.yml/badge.svg)](https://github.com/kshivang/BossTerm/actions/workflows/test-install.yml)
+
+The universal installer automatically detects your platform and installs BossTerm using the best method available.
+
+| Platform | Command |
+|----------|---------|
+| **macOS / Linux** | `curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh \| bash` |
+| **Windows (PowerShell)** | `iwr -useb https://raw.githubusercontent.com/kshivang/BossTerm/master/install.ps1 \| iex` |
+| **Windows (CMD)** | `curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.bat -o install.bat && install.bat` |
+
+**Features:**
+- Auto-detects platform (macOS, Linux, Windows) and architecture (x64, ARM64)
+- Uses the best installation method (Homebrew → DMG on macOS, Deb → RPM → Snap → JAR on Linux)
+- Installs Java 17+ automatically if needed (Windows)
+- Creates CLI launcher (`bossterm` command)
+- Supports `--version`, `--uninstall`, `--dry-run`, and `--method` flags
+
+**Common operations:**
+
+```bash
+# Install specific version
+curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --version 1.0.80
+
+# Preview without installing
+curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --dry-run
+
+# Force specific method (homebrew, dmg, deb, rpm, snap, jar)
+curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --method dmg
+
+# Uninstall
+curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --uninstall
+```
+
+---
+
+### Alternative Installation Methods
+
+<details>
+<summary><strong>macOS (Homebrew)</strong></summary>
 
 ```bash
 brew tap kshivang/bossterm
 brew install --cask bossterm
 ```
 
-### macOS (DMG)
+</details>
+
+<details>
+<summary><strong>macOS (DMG)</strong></summary>
 
 Download the latest DMG from [GitHub Releases](https://github.com/kshivang/BossTerm/releases) and drag BossTerm to Applications.
 
-### Linux (Debian/Ubuntu)
+</details>
+
+<details>
+<summary><strong>Linux (Debian/Ubuntu)</strong></summary>
 
 ```bash
 # Download the .deb package from GitHub Releases
@@ -80,14 +126,20 @@ sudo dpkg -i bossterm_*_amd64.deb
 sudo apt-get install -f  # Install dependencies if needed
 ```
 
-### Linux (Fedora/RHEL)
+</details>
+
+<details>
+<summary><strong>Linux (Fedora/RHEL)</strong></summary>
 
 ```bash
 # Download the .rpm package from GitHub Releases
 sudo dnf install bossterm-*.x86_64.rpm
 ```
 
-### Linux (Snap)
+</details>
+
+<details>
+<summary><strong>Linux (Snap)</strong></summary>
 
 ```bash
 sudo snap install bossterm --classic
@@ -99,7 +151,10 @@ Or download the `.snap` file from [GitHub Releases](https://github.com/kshivang/
 sudo snap install bossterm_*.snap --classic --dangerous
 ```
 
-### JAR (Cross-platform)
+</details>
+
+<details>
+<summary><strong>JAR (Cross-platform)</strong></summary>
 
 Requires Java 17+:
 
@@ -108,13 +163,18 @@ Requires Java 17+:
 java -jar bossterm-*.jar
 ```
 
-### Build from Source
+</details>
+
+<details>
+<summary><strong>Build from Source</strong></summary>
 
 ```bash
 git clone https://github.com/kshivang/BossTerm.git
 cd BossTerm
 ./gradlew :bossterm-app:run
 ```
+
+</details>
 
 ## Features
 
