@@ -10,6 +10,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import ai.rever.bossterm.compose.ai.AIAssistantDefinition
+import ai.rever.bossterm.compose.ai.AIAssistantInstallDialog
 import ai.rever.bossterm.compose.ai.rememberAIAssistantState
 import ai.rever.bossterm.compose.terminal.BlockingTerminalDataStream
 import ai.rever.bossterm.compose.terminal.PerformanceMode
@@ -205,6 +207,9 @@ fun EmbeddableTerminal(
     // AI Assistant integration (issue #225)
     val aiState = rememberAIAssistantState(resolvedSettings)
 
+    // State for AI assistant installation dialog
+    var installDialogAssistant by remember { mutableStateOf<Pair<AIAssistantDefinition, String>?>(null) }
+
     // Initialize session if not already done (session lives in state, not composable)
     LaunchedEffect(effectiveState, resolvedSettings, effectiveCommand) {
         if (effectiveState.session == null) {
@@ -262,6 +267,9 @@ fun EmbeddableTerminal(
                         val workingDir = session.workingDirectory?.value
                         val aiItems = aiState.menuProvider.getMenuItems(
                             terminalWriter = { text -> session.writeUserInput(text) },
+                            onInstallRequest = { assistant, command ->
+                                installDialogAssistant = Pair(assistant, command)
+                            },
                             workingDirectory = workingDir,
                             configs = resolvedSettings.aiAssistantConfigs
                         )
@@ -286,6 +294,26 @@ fun EmbeddableTerminal(
             onLinkClick = onLinkClick,
             hyperlinkRegistry = hyperlinkRegistry,
             modifier = modifier
+        )
+    }
+
+    // AI Assistant Installation Dialog
+    installDialogAssistant?.let { (assistant, command) ->
+        val coroutineScope = rememberCoroutineScope()
+        AIAssistantInstallDialog(
+            assistant = assistant,
+            installCommand = command,
+            onDismiss = {
+                installDialogAssistant = null
+            },
+            onInstallComplete = { success ->
+                if (success) {
+                    // Refresh detection after successful install
+                    coroutineScope.launch {
+                        aiState.detector.detectAll()
+                    }
+                }
+            }
         )
     }
 }

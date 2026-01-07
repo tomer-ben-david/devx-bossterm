@@ -27,13 +27,15 @@ class AIAssistantMenuProvider(
     /**
      * Generate context menu items for AI assistants.
      *
-     * @param terminalWriter Function to write commands to the terminal
+     * @param terminalWriter Function to write commands to the terminal (for launching)
+     * @param onInstallRequest Callback to trigger installation dialog (assistant, installCommand)
      * @param workingDirectory Current working directory for launching assistants
      * @param configs Per-assistant configuration from settings
      * @return List of context menu elements for the AI Assistants section
      */
     fun getMenuItems(
         terminalWriter: (String) -> Unit,
+        onInstallRequest: (AIAssistantDefinition, String) -> Unit,
         workingDirectory: String? = null,
         configs: Map<String, AIAssistantConfigData> = emptyMap()
     ): List<ContextMenuElement> {
@@ -75,7 +77,7 @@ class AIAssistantMenuProvider(
                             id = "ai_install_script_${assistant.id}",
                             label = "Install (Script)",
                             action = {
-                                terminalWriter(launcher.getInstallCommand(assistant))
+                                onInstallRequest(assistant, launcher.getInstallCommand(assistant).trim())
                             }
                         )
                     )
@@ -84,7 +86,7 @@ class AIAssistantMenuProvider(
                             id = "ai_install_npm_${assistant.id}",
                             label = "Install (npm)",
                             action = {
-                                terminalWriter(launcher.getNpmInstallCommand(assistant))
+                                onInstallRequest(assistant, launcher.getNpmInstallCommand(assistant).trim())
                             }
                         )
                     )
@@ -95,7 +97,7 @@ class AIAssistantMenuProvider(
                             id = "ai_install_${assistant.id}",
                             label = "Install",
                             action = {
-                                terminalWriter(launcher.getInstallCommand(assistant))
+                                onInstallRequest(assistant, launcher.getInstallCommand(assistant).trim())
                             }
                         )
                     )

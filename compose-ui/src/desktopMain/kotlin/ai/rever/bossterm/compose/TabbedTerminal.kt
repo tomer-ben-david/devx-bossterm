@@ -9,8 +9,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import ai.rever.bossterm.compose.ContextMenuElement
+import ai.rever.bossterm.compose.ai.AIAssistantDefinition
+import ai.rever.bossterm.compose.ai.AIAssistantInstallDialog
 import ai.rever.bossterm.compose.ai.rememberAIAssistantState
 import ai.rever.bossterm.compose.menu.MenuActions
+import kotlinx.coroutines.launch
 import ai.rever.bossterm.compose.util.loadTerminalFont
 import ai.rever.bossterm.compose.settings.SettingsManager
 import ai.rever.bossterm.compose.settings.TerminalSettingsOverride
@@ -139,6 +142,9 @@ fun TabbedTerminal(
 
     // AI Assistant integration (issue #225)
     val aiState = rememberAIAssistantState(settings)
+
+    // State for AI assistant installation dialog
+    var installDialogAssistant by remember { mutableStateOf<Pair<AIAssistantDefinition, String>?>(null) }
 
     // Initialize external state if provided (only once)
     if (state != null && !state.isInitialized) {
@@ -582,6 +588,9 @@ fun TabbedTerminal(
                                 terminalWriter = { text ->
                                     splitState.getFocusedSession()?.writeUserInput(text)
                                 },
+                                onInstallRequest = { assistant, command ->
+                                    installDialogAssistant = Pair(assistant, command)
+                                },
                                 workingDirectory = workingDir,
                                 configs = settings.aiAssistantConfigs
                             )
@@ -617,5 +626,25 @@ fun TabbedTerminal(
                     .background(Color.White.copy(alpha = 0.15f))
             )
         }
+    }
+
+    // AI Assistant Installation Dialog
+    installDialogAssistant?.let { (assistant, command) ->
+        val coroutineScope = rememberCoroutineScope()
+        AIAssistantInstallDialog(
+            assistant = assistant,
+            installCommand = command,
+            onDismiss = {
+                installDialogAssistant = null
+            },
+            onInstallComplete = { success ->
+                if (success) {
+                    // Refresh detection after successful install
+                    coroutineScope.launch {
+                        aiState.detector.detectAll()
+                    }
+                }
+            }
+        )
     }
 }
