@@ -313,9 +313,11 @@ jobs:
 
       - name: Test platform detection (dry-run)
         run: |
-          $output = .\install.ps1 -DryRun 2>&1 | Out-String
+          $output = .\install.ps1 -DryRun -Version 1.0.80 2>&1 | Out-String
           Write-Host $output
-          if ($output -notmatch "Platform: Windows") {
+          # Strip ANSI codes for matching
+          $cleanOutput = $output -replace '\x1b\[[0-9;]*m', ''
+          if ($cleanOutput -notmatch "Platform.*Windows") {
             throw "Platform detection failed"
           }
         shell: pwsh
@@ -363,7 +365,7 @@ jobs:
 
       - name: Test /dryrun
         run: |
-          install.bat /dryrun
+          install.bat /dryrun /version:1.0.80
           if errorlevel 1 exit /b 1
         shell: cmd
 
