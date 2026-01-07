@@ -55,7 +55,11 @@ class AIAssistantLauncher {
         if (assistant.installCommand.startsWith("curl")) {
             return "${assistant.installCommand}\n"
         }
-        // Otherwise use npm with Node.js auto-installation
+        // If no npm package defined (VCS tools like git/gh), use installCommand directly
+        if (assistant.npmInstallCommand == null) {
+            return "${assistant.installCommand}\n"
+        }
+        // Otherwise use npm with Node.js auto-installation (AI assistants)
         return "${getNpmInstallCommandWithNodeCheck(assistant)}\n"
     }
 
