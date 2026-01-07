@@ -472,9 +472,8 @@ class BossEmulator(dataStream: TerminalDataStream, terminal: Terminal?) :
             additionalArgs.add(exitCodeArg)
         }
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("OSC 133 shell integration: type=$type, args=$additionalArgs")
-        }
+        // Always log OSC 133 for debugging installation issues
+        println("DEBUG OSC 133: typeStr='$typeStr', type='$type', additionalArgs=$additionalArgs")
 
         myTerminal?.processShellIntegration(type, additionalArgs)
         return true

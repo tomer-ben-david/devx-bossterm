@@ -143,8 +143,18 @@ fun TabbedTerminal(
     // AI Assistant integration (issue #225)
     val aiState = rememberAIAssistantState(settings)
 
-    // State for AI assistant installation dialog (assistant, command, terminalWriter)
-    var installDialogState by remember { mutableStateOf<Triple<AIAssistantDefinition, String, (String) -> Unit>?>(null) }
+    // Simple holder for detection results - avoids Compose state recomposition issues
+    // This is NOT a Compose state; it's a plain mutable reference that both lambdas can access
+    val detectionResultsHolder = remember { mutableMapOf<String, Map<String, Boolean>?>().apply { put("latest", null) } }
+
+    // State for AI assistant installation dialog
+    data class InstallDialogParams(
+        val assistant: AIAssistantDefinition,
+        val command: String,
+        val npmCommand: String?,
+        val terminalWriter: (String) -> Unit
+    )
+    var installDialogState by remember { mutableStateOf<InstallDialogParams?>(null) }
 
     // Initialize external state if provided (only once)
     if (state != null && !state.isInitialized) {
@@ -589,11 +599,12 @@ fun TabbedTerminal(
                             }
                             val aiItems = aiState.menuProvider.getMenuItems(
                                 terminalWriter = terminalWriter,
-                                onInstallRequest = { assistant, command ->
-                                    installDialogState = Triple(assistant, command, terminalWriter)
+                                onInstallRequest = { assistant, command, npmCommand ->
+                                    installDialogState = InstallDialogParams(assistant, command, npmCommand, terminalWriter)
                                 },
                                 workingDirectory = workingDir,
-                                configs = settings.aiAssistantConfigs
+                                configs = settings.aiAssistantConfigs,
+                                statusOverride = detectionResultsHolder["latest"]
                             )
                             userItems + aiItems
                         } else {
@@ -608,8 +619,10 @@ fun TabbedTerminal(
                         // Run user callback first if provided
                         onContextMenuOpenAsync?.invoke()
                         // Refresh AI assistant detection before showing menu
+                        // Store results in shared holder for immediate access by customContextMenuItemsProvider
                         if (settings.aiAssistantsEnabled) {
-                            aiState.detector.detectAll()
+                            val freshStatus = aiState.detector.detectAll()
+                            detectionResultsHolder["latest"] = freshStatus
                         }
                     }
                 } else null,
@@ -630,11 +643,12 @@ fun TabbedTerminal(
     }
 
     // AI Assistant Installation Dialog
-    installDialogState?.let { (assistant, command, terminalWriter) ->
+    installDialogState?.let { params ->
         val coroutineScope = rememberCoroutineScope()
         AIAssistantInstallDialog(
-            assistant = assistant,
-            installCommand = command,
+            assistant = params.assistant,
+            installCommand = params.command,
+            npmInstallCommand = params.npmCommand,
             onDismiss = {
                 installDialogState = null
                 // Refresh detection when dialog closes (avoids race condition)
@@ -645,9 +659,9 @@ fun TabbedTerminal(
             onInstallComplete = { success ->
                 // Write result to parent terminal using echo for proper ANSI handling
                 if (success) {
-                    terminalWriter("echo -e '\\033[32m✓ ${assistant.displayName} installed successfully!\\033[0m'\n")
+                    params.terminalWriter("echo -e '\\033[32m✓ ${params.assistant.displayName} installed successfully!\\033[0m'\n")
                 } else {
-                    terminalWriter("echo -e '\\033[31m✗ ${assistant.displayName} installation failed.\\033[0m'\n")
+                    params.terminalWriter("echo -e '\\033[31m✗ ${params.assistant.displayName} installation failed.\\033[0m'\n")
                 }
             }
         )

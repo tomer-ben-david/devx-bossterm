@@ -28,18 +28,21 @@ class AIAssistantMenuProvider(
      * Generate context menu items for AI assistants.
      *
      * @param terminalWriter Function to write commands to the terminal (for launching)
-     * @param onInstallRequest Callback to trigger installation dialog (assistant, installCommand)
+     * @param onInstallRequest Callback to trigger installation dialog (assistant, installCommand, npmCommand?)
      * @param workingDirectory Current working directory for launching assistants
      * @param configs Per-assistant configuration from settings
+     * @param statusOverride Optional pre-computed installation status (bypasses StateFlow for immediate updates)
      * @return List of context menu elements for the AI Assistants section
      */
     fun getMenuItems(
         terminalWriter: (String) -> Unit,
-        onInstallRequest: (AIAssistantDefinition, String) -> Unit,
+        onInstallRequest: (AIAssistantDefinition, String, String?) -> Unit,
         workingDirectory: String? = null,
-        configs: Map<String, AIAssistantConfigData> = emptyMap()
+        configs: Map<String, AIAssistantConfigData> = emptyMap(),
+        statusOverride: Map<String, Boolean>? = null
     ): List<ContextMenuElement> {
-        val status = detector.installationStatus.value
+        // Use override if provided (for immediate updates after detection), otherwise read from StateFlow
+        val status = statusOverride ?: detector.installationStatus.value
         val assistantItems = mutableListOf<ContextMenuElement>()
 
         // Add items for each assistant
@@ -70,34 +73,41 @@ class AIAssistantMenuProvider(
                 val installItems = mutableListOf<ContextMenuElement>()
 
                 // Add primary install option
-                if (assistant.npmInstallCommand != null) {
+                val scriptCommand = launcher.getInstallCommand(assistant).trim()
+                val npmCommand = if (assistant.npmInstallCommand != null) {
+                    launcher.getNpmInstallCommand(assistant).trim()
+                } else null
+
+                if (npmCommand != null) {
                     // Has both script and npm - show both options
+                    // Script option passes npm as fallback
                     installItems.add(
                         ContextMenuItem(
                             id = "ai_install_script_${assistant.id}",
                             label = "Install (Script)",
                             action = {
-                                onInstallRequest(assistant, launcher.getInstallCommand(assistant).trim())
+                                onInstallRequest(assistant, scriptCommand, npmCommand)
                             }
                         )
                     )
+                    // npm option has no fallback
                     installItems.add(
                         ContextMenuItem(
                             id = "ai_install_npm_${assistant.id}",
                             label = "Install (npm)",
                             action = {
-                                onInstallRequest(assistant, launcher.getNpmInstallCommand(assistant).trim())
+                                onInstallRequest(assistant, npmCommand, null)
                             }
                         )
                     )
                 } else {
-                    // Only one install method
+                    // Only one install method (no npm fallback)
                     installItems.add(
                         ContextMenuItem(
                             id = "ai_install_${assistant.id}",
                             label = "Install",
                             action = {
-                                onInstallRequest(assistant, launcher.getInstallCommand(assistant).trim())
+                                onInstallRequest(assistant, scriptCommand, null)
                             }
                         )
                     )

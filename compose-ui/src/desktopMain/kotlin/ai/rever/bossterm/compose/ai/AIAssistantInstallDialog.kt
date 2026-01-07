@@ -30,13 +30,20 @@ sealed class InstallDialogState {
 }
 
 /**
+ * Installation method being used.
+ */
+enum class InstallMethod { SCRIPT, NPM }
+
+/**
  * Dialog for installing AI assistants with an embedded terminal.
  *
  * Shows installation progress in a terminal, auto-closes on success,
- * and displays error with dismiss option on failure.
+ * and displays error with dismiss option on failure. If script installation
+ * fails and npm option is available, offers to try npm instead.
  *
  * @param assistant The AI assistant to install
- * @param installCommand The installation command to run
+ * @param installCommand The installation command to run (script method)
+ * @param npmInstallCommand Optional npm install command as fallback
  * @param onDismiss Called when dialog should close
  * @param onInstallComplete Called when installation completes (success or failure)
  */
@@ -44,10 +51,24 @@ sealed class InstallDialogState {
 fun AIAssistantInstallDialog(
     assistant: AIAssistantDefinition,
     installCommand: String,
+    npmInstallCommand: String? = null,
     onDismiss: () -> Unit,
     onInstallComplete: (success: Boolean) -> Unit = {}
 ) {
     var dialogState by remember { mutableStateOf<InstallDialogState>(InstallDialogState.Installing) }
+    var currentMethod by remember { mutableStateOf(InstallMethod.SCRIPT) }
+    var terminalKey by remember { mutableStateOf(0) } // Used to force terminal recreation
+
+    // Determine current command based on method
+    val currentCommand = when (currentMethod) {
+        InstallMethod.SCRIPT -> installCommand
+        InstallMethod.NPM -> npmInstallCommand ?: installCommand
+    }
+
+    // Check if npm fallback is available (only show if script failed and npm exists)
+    val canTryNpm = npmInstallCommand != null &&
+                    currentMethod == InstallMethod.SCRIPT &&
+                    dialogState is InstallDialogState.Error
 
     Dialog(
         onDismissRequest = {
@@ -105,23 +126,54 @@ fun AIAssistantInstallDialog(
                     }
                 }
 
-                // Terminal or error content
+                // Terminal content - always visible to show installation output
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
                 ) {
-                    when (val state = dialogState) {
-                        is InstallDialogState.Installing -> {
-                            // Embedded terminal running installation
+                    if (dialogState is InstallDialogState.Success) {
+                        // Success state with close button
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "✓",
+                                color = Color(0xFF4CAF50),
+                                fontSize = 48.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Installation complete!",
+                                color = Color(0xFF4CAF50),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Button(
+                                onClick = onDismiss,
+                                colors = ButtonDefaults.buttonColors(
+                                    backgroundColor = Color(0xFF4CAF50)
+                                )
+                            ) {
+                                Text("Close", color = Color.White)
+                            }
+                        }
+                    } else {
+                        // Show terminal for installing and error states
+                        // Using key to force terminal recreation when retrying with different method
+                        key(terminalKey) {
                             EmbeddableTerminal(
-                                initialCommand = installCommand,
+                                initialCommand = currentCommand,
                                 onInitialCommandComplete = { success, exitCode ->
+                                    println("DEBUG: AIAssistantInstallDialog - onInitialCommandComplete: success=$success, exitCode=$exitCode, method=$currentMethod")
                                     if (success) {
                                         dialogState = InstallDialogState.Success
                                         onInstallComplete(true)
-                                        // Auto-close on success after brief delay
-                                        // (handled by LaunchedEffect below)
                                     } else {
                                         dialogState = InstallDialogState.Error(exitCode)
                                         onInstallComplete(false)
@@ -134,77 +186,68 @@ fun AIAssistantInstallDialog(
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
+                    }
+                }
 
-                        is InstallDialogState.Success -> {
-                            // Success state with close button
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Text(
-                                    text = "✓",
-                                    color = Color(0xFF4CAF50),
-                                    fontSize = 48.sp
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Installation complete!",
-                                    color = Color(0xFF4CAF50),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Spacer(modifier = Modifier.height(24.dp))
+                // Error footer bar - shows when installation failed
+                if (dialogState is InstallDialogState.Error) {
+                    val errorState = dialogState as InstallDialogState.Error
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF5C2020))
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Error,
+                                contentDescription = null,
+                                tint = Color(0xFFE57373),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (currentMethod == InstallMethod.SCRIPT)
+                                    "Script installation failed (exit code: ${errorState.exitCode})"
+                                else
+                                    "npm installation failed (exit code: ${errorState.exitCode})",
+                                color = Color(0xFFE57373),
+                                fontSize = 13.sp
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Show "Try npm" button if script failed and npm is available
+                            if (canTryNpm) {
                                 Button(
-                                    onClick = onDismiss,
+                                    onClick = {
+                                        // Switch to npm and restart
+                                        currentMethod = InstallMethod.NPM
+                                        dialogState = InstallDialogState.Installing
+                                        terminalKey++ // Force new terminal
+                                    },
                                     colors = ButtonDefaults.buttonColors(
-                                        backgroundColor = Color(0xFF4CAF50)
-                                    )
+                                        backgroundColor = Color(0xFF1976D2)
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                                    modifier = Modifier.height(32.dp)
                                 ) {
-                                    Text("Close", color = Color.White)
+                                    Text("Try npm", color = Color.White, fontSize = 13.sp)
                                 }
                             }
-                        }
-
-                        is InstallDialogState.Error -> {
-                            // Error state with dismiss button
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
+                            Button(
+                                onClick = onDismiss,
+                                colors = ButtonDefaults.buttonColors(
+                                    backgroundColor = Color(0xFF3C3C3C)
+                                ),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                                modifier = Modifier.height(32.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Error,
-                                    contentDescription = null,
-                                    tint = Color(0xFFE57373),
-                                    modifier = Modifier.size(48.dp)
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    text = "Installation Failed",
-                                    color = Color(0xFFE57373),
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Exit code: ${state.exitCode}",
-                                    color = Color.White.copy(alpha = 0.6f),
-                                    fontSize = 14.sp
-                                )
-                                Spacer(modifier = Modifier.height(24.dp))
-                                Button(
-                                    onClick = onDismiss,
-                                    colors = ButtonDefaults.buttonColors(
-                                        backgroundColor = Color(0xFF3C3C3C)
-                                    )
-                                ) {
-                                    Text("Dismiss", color = Color.White)
-                                }
+                                Text("Dismiss", color = Color.White, fontSize = 13.sp)
                             }
                         }
                     }
