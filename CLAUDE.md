@@ -532,6 +532,50 @@ state.write("echo hello\n", tabIndex = 0)
 
 **Status**: Complete (December 28, 2025, issue #182)
 
+### 15. AI Assistant Integration (#225)
+- **Context Menu Integration**: Auto-detect and launch/install AI coding assistants
+- **Supported Assistants**: Claude Code, Codex CLI, Gemini CLI, OpenCode
+- **Detection**: Multi-strategy detection (path check, `which`, shell-sourced which, nvm paths)
+- **Installation Dialog**: Embedded terminal with live output, npm fallback on failure
+- **Programmatic API**: `installAIAssistant()`, `isAIAssistantInstalled()`, `getAvailableAIAssistants()`
+
+**Usage (EmbeddableTerminal)**:
+```kotlin
+val state = rememberEmbeddableTerminalState()
+
+// Check if installed
+val isInstalled = state.isAIAssistantInstalled("claude-code")
+
+// Trigger installation dialog
+state.installAIAssistant("claude-code")
+
+// Use npm instead of script
+state.installAIAssistant("claude-code", useNpm = true)
+```
+
+**Usage (TabbedTerminal)**:
+```kotlin
+val state = rememberTabbedTerminalState()
+
+// Install to active tab
+state.installAIAssistant("claude-code")
+
+// Install to specific tab
+state.installAIAssistant("claude-code", tabIndex = 0)
+state.installAIAssistant("claude-code", tabId = "my-tab")
+```
+
+**Key Files**:
+- `compose-ui/.../ai/AIAssistantDefinition.kt`: Assistant definitions and registry
+- `compose-ui/.../ai/AIAssistantDetector.kt`: Multi-strategy installation detection
+- `compose-ui/.../ai/AIAssistantLauncher.kt`: Launch commands and install commands
+- `compose-ui/.../ai/AIAssistantMenuProvider.kt`: Context menu generation
+- `compose-ui/.../ai/AIAssistantInstallDialog.kt`: Installation dialog with embedded terminal
+
+**Settings**: `aiAssistantsEnabled` (default: true), per-assistant `yoloEnabled` config
+
+**Status**: Complete (January 6, 2026, issue #225)
+
 ## Known Issues & Todos
 
 ### In Progress
@@ -544,6 +588,7 @@ None - feature complete for current phase
 - SSH key management UI (future enhancement)
 
 ### Completed (Recent)
+✅ AI Assistant Integration (context menu, detection, installation) - January 6, 2026, issue #225
 ✅ Programmatic Input API (sendInput, sendCtrlC, sendCtrlD, sendCtrlZ) - December 28, 2025, issue #182
 ✅ Command Completion Notifications (OSC 133 Shell Integration) - December 7, 2025
 ✅ Tab Keyboard Shortcuts (Ctrl+T, Ctrl+W, Ctrl+Tab, Ctrl+1-9) - December 3, 2025
@@ -614,9 +659,30 @@ None - feature complete for current phase
 ---
 
 ## Last Updated
-December 28, 2025
+January 6, 2026
 
 ### Recent Changes
+- **January 6, 2026**: AI Assistant Integration (#225)
+  - **Feature**: Context menu integration for detecting, launching, and installing AI coding assistants
+  - **Supported Assistants**: Claude Code, Codex CLI, Gemini CLI, OpenCode
+  - **Detection**: Multi-strategy (path check, `which`, shell-sourced which, nvm paths)
+  - **Installation Dialog**: Embedded terminal showing live output, npm fallback on script failure
+  - **Programmatic API**:
+    - `getAvailableAIAssistants()`: List all assistant IDs
+    - `getAIAssistant(id)`: Get assistant definition
+    - `isAIAssistantInstalled(id)`: Check installation (suspend)
+    - `installAIAssistant(id, useNpm?)`: Trigger installation dialog
+    - `cancelAIInstallation()`: Cancel pending request
+  - **TabbedTerminal extras**: Tab targeting via `tabIndex` or `tabId`
+  - **New Files**:
+    - `AIAssistantDefinition.kt`: Assistant registry with commands/URLs
+    - `AIAssistantDetector.kt`: Installation detection with ProcessBuilder
+    - `AIAssistantLauncher.kt`: Launch/install command generation
+    - `AIAssistantMenuProvider.kt`: Dynamic context menu generation
+    - `AIAssistantInstallDialog.kt`: Installation dialog composable + shared `AIInstallDialogHost`
+  - **Settings**: `aiAssistantsEnabled`, per-assistant `yoloEnabled` config
+  - **Documentation**: Updated `docs/embedding.md` and `docs/tabbed-terminal.md`
+  - **Status**: Complete
 - **December 28, 2025**: Stable Tab/Session ID API (#190)
   - **Feature**: Add stable ID-based API for reliable tab targeting that survives reordering
   - **Purpose**: Tab indices change when tabs are reordered/closed; stable IDs provide reliable targeting

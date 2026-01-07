@@ -914,6 +914,87 @@ TabbedTerminal(
 
 See [Embedding Guide - Custom Hyperlink Patterns](embedding.md#custom-hyperlink-patterns) for full `HyperlinkPattern` documentation.
 
+## AI Assistant Installation API
+
+BossTerm includes built-in support for detecting and installing AI coding assistants. The API provides programmatic access from `TabbedTerminalState`.
+
+### Available Assistants
+
+| ID | Name | Description |
+|----|------|-------------|
+| `claude-code` | Claude Code | Anthropic's AI coding assistant |
+| `codex` | Codex CLI | OpenAI's coding assistant |
+| `gemini-cli` | Gemini CLI | Google's AI assistant |
+| `opencode` | OpenCode | Open-source AI coding assistant |
+
+### API Methods
+
+```kotlin
+val state = rememberTabbedTerminalState()
+
+// List all available AI assistant IDs
+val assistants = state.getAvailableAIAssistants()
+
+// Get assistant definition by ID
+val claude = state.getAIAssistant("claude-code")
+
+// Check if installed (suspend function)
+val isInstalled = state.isAIAssistantInstalled("claude-code")
+
+// Trigger installation in active tab
+state.installAIAssistant("claude-code")
+
+// Install in specific tab by index
+state.installAIAssistant("claude-code", tabIndex = 0)
+
+// Install in specific tab by stable ID
+state.installAIAssistant("claude-code", tabId = "my-tab")
+
+// Use npm instead of script installation
+state.installAIAssistant("claude-code", useNpm = true)
+
+// Cancel pending installation
+state.cancelAIInstallation()
+```
+
+### Example: AI Toolbar
+
+```kotlin
+@Composable
+fun TerminalWithAIToolbar() {
+    val state = rememberTabbedTerminalState()
+    var claudeInstalled by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        claudeInstalled = state.isAIAssistantInstalled("claude-code")
+    }
+
+    Column {
+        Row {
+            if (claudeInstalled) {
+                Button(onClick = { state.write("claude\n") }) {
+                    Text("Launch Claude")
+                }
+            } else {
+                Button(onClick = { state.installAIAssistant("claude-code") }) {
+                    Text("Install Claude")
+                }
+            }
+        }
+
+        TabbedTerminal(
+            state = state,
+            onExit = { /* ... */ },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+```
+
+### Built-in Context Menu
+
+When `aiAssistantsEnabled` is `true` in settings, the context menu includes an "AI Assistants" submenu with install/launch options for all supported assistants. Detection runs when the menu opens.
+
 ## Custom Context Menu
 
 Add custom items to the right-click context menu using the `contextMenuItems` parameter.

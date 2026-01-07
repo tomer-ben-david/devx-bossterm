@@ -896,6 +896,98 @@ fun TerminalWithControls() {
 }
 ```
 
+## AI Assistant Installation API
+
+BossTerm includes built-in support for detecting and installing AI coding assistants (Claude Code, Codex, Gemini CLI, OpenCode). This API provides programmatic access to the AI assistant integration features.
+
+### Available Assistants
+
+| ID | Name | Description |
+|----|------|-------------|
+| `claude-code` | Claude Code | Anthropic's AI coding assistant |
+| `codex` | Codex CLI | OpenAI's coding assistant |
+| `gemini-cli` | Gemini CLI | Google's AI assistant |
+| `opencode` | OpenCode | Open-source AI coding assistant |
+
+### API Methods
+
+```kotlin
+val state = rememberEmbeddableTerminalState()
+
+// List all available AI assistant IDs
+val assistants = state.getAvailableAIAssistants()
+// Returns: ["claude-code", "codex", "gemini-cli", "opencode"]
+
+// Get assistant definition by ID
+val claude = state.getAIAssistant("claude-code")
+// Returns: AIAssistantDefinition with displayName, command, website, etc.
+
+// Check if an assistant is installed (suspend function)
+val isInstalled = state.isAIAssistantInstalled("claude-code")
+// Returns: true if installed, false otherwise
+
+// Trigger installation dialog
+state.installAIAssistant("claude-code")
+// Opens installation dialog with terminal output
+
+// Use npm installation method instead of script
+state.installAIAssistant("claude-code", useNpm = true)
+
+// Cancel pending installation
+state.cancelAIInstallation()
+```
+
+### Installation Methods
+
+Most AI assistants support two installation methods:
+
+1. **Script Installation** (default): Uses the assistant's official install script
+2. **npm Installation**: Uses npm global install (fallback option)
+
+When script installation fails, the dialog automatically offers the npm option as a fallback.
+
+### Example: Custom AI Menu
+
+```kotlin
+@Composable
+fun TerminalWithAIMenu() {
+    val state = rememberEmbeddableTerminalState()
+    var claudeInstalled by remember { mutableStateOf(false) }
+
+    // Check installation status
+    LaunchedEffect(Unit) {
+        claudeInstalled = state.isAIAssistantInstalled("claude-code")
+    }
+
+    Column {
+        Row {
+            if (claudeInstalled) {
+                Button(onClick = { state.write("claude\n") }) {
+                    Text("Launch Claude")
+                }
+            } else {
+                Button(onClick = { state.installAIAssistant("claude-code") }) {
+                    Text("Install Claude Code")
+                }
+            }
+        }
+
+        EmbeddableTerminal(
+            state = state,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+```
+
+### Built-in Context Menu Integration
+
+When `aiAssistantsEnabled` is `true` in settings (default), the context menu automatically includes an "AI Assistants" submenu with:
+- **Installed assistants**: Direct launch option
+- **Uninstalled assistants**: Install options (Script, npm) and Learn More link
+
+The detection runs asynchronously when the context menu opens, ensuring up-to-date installation status.
+
 ## Migration Guide
 
 ### v1.0.65+ Breaking Changes
