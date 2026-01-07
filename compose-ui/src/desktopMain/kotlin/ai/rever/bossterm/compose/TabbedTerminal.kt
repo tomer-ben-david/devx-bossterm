@@ -728,7 +728,9 @@ fun TabbedTerminal(
                     val shellItems = shellMenuProvider.getMenuItems(
                         terminalWriter = terminalWriter,
                         onInstallRequest = { toolId, command, npmCommand ->
-                            val tool = AIAssistants.findById(toolId)
+                            // Handle both install and uninstall (e.g., "starship-uninstall" -> "starship")
+                            val baseToolId = toolId.removeSuffix("-uninstall")
+                            val tool = AIAssistants.findById(baseToolId)
                             if (tool != null) {
                                 installDialogState = AIInstallDialogParams(tool, command, npmCommand, terminalWriter)
                             }
