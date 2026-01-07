@@ -593,7 +593,7 @@ private fun buildInstallCommandInternal(selections: OnboardingSelections, instal
                "{ command -v pacman >/dev/null 2>&1 && sudo pacman -S --noconfirm $pkg; }"
     }
 
-    // Shell installation
+    // Shell installation and set as default
     if (selections.shell != ShellChoice.KEEP_CURRENT) {
         val shellInstalled = when (selections.shell) {
             ShellChoice.ZSH -> installed.zsh
@@ -601,13 +601,17 @@ private fun buildInstallCommandInternal(selections: OnboardingSelections, instal
             ShellChoice.FISH -> installed.fish
             ShellChoice.KEEP_CURRENT -> true
         }
+        val shellCmd = selections.shell.command
         if (!shellInstalled) {
-            val shellCmd = selections.shell.command
             when {
                 isMac -> sudoCommands.add("brew install $shellCmd")
                 isWindows -> userCommands.add("echo 'Please install $shellCmd manually on Windows'")
                 else -> sudoCommands.add(getLinuxInstall(shellCmd))
             }
+        }
+        // Set selected shell as default using chsh (requires sudo for non-interactive use)
+        if (!isWindows) {
+            sudoCommands.add("sudo chsh -s \$(which $shellCmd) \$USER && echo '✓ Default shell changed to $shellCmd'")
         }
     }
 
