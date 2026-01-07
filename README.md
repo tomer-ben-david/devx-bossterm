@@ -61,42 +61,64 @@ Alacritty  ███████████████████████
 
 ## Installation
 
-### Quick Install (Recommended)
+### Universal Installer (Recommended)
 
-Install BossTerm with a single command:
+[![Install Script](https://github.com/kshivang/BossTerm/actions/workflows/test-install.yml/badge.svg)](https://github.com/kshivang/BossTerm/actions/workflows/test-install.yml)
+
+The universal installer automatically detects your platform and installs BossTerm using the best method available.
+
+| Platform | Command |
+|----------|---------|
+| **macOS / Linux** | `curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh \| bash` |
+| **Windows (PowerShell)** | `iwr -useb https://raw.githubusercontent.com/kshivang/BossTerm/master/install.ps1 \| iex` |
+| **Windows (CMD)** | `curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.bat -o install.bat && install.bat` |
+
+**Features:**
+- Auto-detects platform (macOS, Linux, Windows) and architecture (x64, ARM64)
+- Uses the best installation method (Homebrew → DMG on macOS, Deb → RPM → Snap → JAR on Linux)
+- Installs Java 17+ automatically if needed (Windows)
+- Creates CLI launcher (`bossterm` command)
+- Supports `--version`, `--uninstall`, `--dry-run`, and `--method` flags
+
+**Common operations:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash
-```
+# Install specific version
+curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --version 1.0.80
 
-Or install a specific version:
+# Preview without installing
+curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --dry-run
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --version 1.0.5
-```
+# Force specific method (homebrew, dmg, deb, rpm, snap, jar)
+curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --method dmg
 
-The installer automatically detects your platform and uses the best method (Homebrew on macOS, Deb/RPM on Linux).
-
-To uninstall:
-
-```bash
+# Uninstall
 curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --uninstall
 ```
 
 ---
 
-### macOS (Homebrew)
+### Alternative Installation Methods
+
+<details>
+<summary><strong>macOS (Homebrew)</strong></summary>
 
 ```bash
 brew tap kshivang/bossterm
 brew install --cask bossterm
 ```
 
-### macOS (DMG)
+</details>
+
+<details>
+<summary><strong>macOS (DMG)</strong></summary>
 
 Download the latest DMG from [GitHub Releases](https://github.com/kshivang/BossTerm/releases) and drag BossTerm to Applications.
 
-### Linux (Debian/Ubuntu)
+</details>
+
+<details>
+<summary><strong>Linux (Debian/Ubuntu)</strong></summary>
 
 ```bash
 # Download the .deb package from GitHub Releases
@@ -104,14 +126,20 @@ sudo dpkg -i bossterm_*_amd64.deb
 sudo apt-get install -f  # Install dependencies if needed
 ```
 
-### Linux (Fedora/RHEL)
+</details>
+
+<details>
+<summary><strong>Linux (Fedora/RHEL)</strong></summary>
 
 ```bash
 # Download the .rpm package from GitHub Releases
 sudo dnf install bossterm-*.x86_64.rpm
 ```
 
-### Linux (Snap)
+</details>
+
+<details>
+<summary><strong>Linux (Snap)</strong></summary>
 
 ```bash
 sudo snap install bossterm --classic
@@ -123,44 +151,10 @@ Or download the `.snap` file from [GitHub Releases](https://github.com/kshivang/
 sudo snap install bossterm_*.snap --classic --dangerous
 ```
 
-### Windows (PowerShell)
+</details>
 
-```powershell
-# Install latest version
-iwr -useb https://raw.githubusercontent.com/kshivang/BossTerm/master/install.ps1 | iex
-
-# Install specific version
-& ([scriptblock]::Create((iwr -useb https://raw.githubusercontent.com/kshivang/BossTerm/master/install.ps1))) -Version 1.0.5
-
-# Uninstall
-& ([scriptblock]::Create((iwr -useb https://raw.githubusercontent.com/kshivang/BossTerm/master/install.ps1))) -Uninstall
-```
-
-Or run from the repository:
-
-```powershell
-.\install.ps1
-.\install.ps1 -Version 1.0.5
-.\install.ps1 -Uninstall
-```
-
-### Windows (Batch - Legacy)
-
-For systems without PowerShell or older Windows versions:
-
-```cmd
-:: Download and run
-curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.bat -o install.bat && install.bat
-
-:: Or from repository
-install.bat
-install.bat /version:1.0.5
-install.bat /uninstall
-```
-
-> **Note:** Windows installation requires Java 17+. The installer will attempt to install Java via winget or Chocolatey if not found.
-
-### JAR (Cross-platform)
+<details>
+<summary><strong>JAR (Cross-platform)</strong></summary>
 
 Requires Java 17+:
 
@@ -169,13 +163,18 @@ Requires Java 17+:
 java -jar bossterm-*.jar
 ```
 
-### Build from Source
+</details>
+
+<details>
+<summary><strong>Build from Source</strong></summary>
 
 ```bash
 git clone https://github.com/kshivang/BossTerm.git
 cd BossTerm
 ./gradlew :bossterm-app:run
 ```
+
+</details>
 
 ## Features
 
