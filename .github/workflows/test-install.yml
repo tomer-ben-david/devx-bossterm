@@ -62,15 +62,10 @@ jobs:
 
       - name: Test platform detection (dry-run)
         run: |
-          set +e
-          echo "=== Running install.sh --dry-run --method ${{ matrix.method }} ==="
-          ./install.sh --dry-run --method ${{ matrix.method }}
-          EXIT_CODE=$?
-          echo "=== Exit code: $EXIT_CODE ==="
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "Script failed with exit code $EXIT_CODE"
-            exit 1
-          fi
+          OUTPUT=$(./install.sh --dry-run --method ${{ matrix.method }} --version 1.0.80 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "Platform: darwin"
+          echo "$OUTPUT" | grep -q "arm64"
 
       - name: Test install (real)
         if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
@@ -118,7 +113,7 @@ jobs:
 
       - name: Test platform detection (dry-run)
         run: |
-          OUTPUT=$(./install.sh --dry-run --method ${{ matrix.method }} 2>&1)
+          OUTPUT=$(./install.sh --dry-run --method ${{ matrix.method }} --version 1.0.80 2>&1)
           echo "$OUTPUT"
           echo "$OUTPUT" | grep -q "Platform: linux"
           echo "$OUTPUT" | grep -q "amd64"
@@ -156,7 +151,7 @@ jobs:
 
       - name: Test platform detection (dry-run)
         run: |
-          OUTPUT=$(./install.sh --dry-run --method deb 2>&1)
+          OUTPUT=$(./install.sh --dry-run --method deb --version 1.0.80 2>&1)
           echo "$OUTPUT"
           echo "$OUTPUT" | grep -q "Platform: linux"
           echo "$OUTPUT" | grep -q "arm64"
@@ -199,7 +194,7 @@ jobs:
 
       - name: Test platform detection (dry-run)
         run: |
-          OUTPUT=$(./install.sh --dry-run --method rpm 2>&1)
+          OUTPUT=$(./install.sh --dry-run --method rpm --version 1.0.80 2>&1)
           echo "$OUTPUT"
           echo "$OUTPUT" | grep -q "Platform: linux"
           echo "$OUTPUT" | grep -q "Method: rpm"
@@ -229,7 +224,7 @@ jobs:
 
       - name: Test platform detection (dry-run)
         run: |
-          OUTPUT=$(./install.sh --dry-run --method deb 2>&1)
+          OUTPUT=$(./install.sh --dry-run --method deb --version 1.0.80 2>&1)
           echo "$OUTPUT"
           echo "$OUTPUT" | grep -q "Platform: linux"
           echo "$OUTPUT" | grep -q "Method: deb"
