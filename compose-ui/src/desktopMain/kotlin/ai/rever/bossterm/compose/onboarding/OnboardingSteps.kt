@@ -20,6 +20,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.rever.bossterm.compose.EmbeddableTerminal
+import ai.rever.bossterm.compose.ai.AIAssistantIds
+import ai.rever.bossterm.compose.ai.AIAssistants
 import ai.rever.bossterm.compose.settings.TerminalSettingsOverride
 import ai.rever.bossterm.compose.settings.SettingsTheme.AccentColor
 import ai.rever.bossterm.compose.settings.SettingsTheme.BackgroundColor
@@ -309,12 +311,17 @@ fun AIAssistantsStep(
         val isInstalled: Boolean
     )
 
-    val assistants = listOf(
-        AIAssistant("claude-code", "Claude Code", "Anthropic's AI coding assistant", installedTools.claudeCode),
-        AIAssistant("gemini-cli", "Gemini CLI", "Google's AI coding assistant", installedTools.gemini),
-        AIAssistant("codex", "Codex", "OpenAI's coding assistant", installedTools.codex),
-        AIAssistant("opencode", "OpenCode", "Open-source AI coding assistant", installedTools.opencode)
-    )
+    // Build assistants list from the registry with installed status
+    val assistants = AIAssistants.AI_ASSISTANTS.map { definition ->
+        val isInstalled = when (definition.id) {
+            AIAssistantIds.CLAUDE_CODE -> installedTools.claudeCode
+            AIAssistantIds.GEMINI_CLI -> installedTools.gemini
+            AIAssistantIds.CODEX -> installedTools.codex
+            AIAssistantIds.OPENCODE -> installedTools.opencode
+            else -> false
+        }
+        AIAssistant(definition.id, definition.displayName, definition.description, isInstalled)
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -416,20 +423,15 @@ fun ReviewStep(
         // AI Assistants
         selections.aiAssistants.forEach { id ->
             val isInstalled = when (id) {
-                "claude-code" -> installedTools.claudeCode
-                "gemini-cli" -> installedTools.gemini
-                "codex" -> installedTools.codex
-                "opencode" -> installedTools.opencode
+                AIAssistantIds.CLAUDE_CODE -> installedTools.claudeCode
+                AIAssistantIds.GEMINI_CLI -> installedTools.gemini
+                AIAssistantIds.CODEX -> installedTools.codex
+                AIAssistantIds.OPENCODE -> installedTools.opencode
                 else -> true
             }
             if (!isInstalled) {
-                val name = when (id) {
-                    "claude-code" -> "Claude Code"
-                    "gemini-cli" -> "Gemini CLI"
-                    "codex" -> "Codex"
-                    "opencode" -> "OpenCode"
-                    else -> id
-                }
+                // Get display name from registry, fallback to ID
+                val name = AIAssistants.findById(id)?.displayName ?: id
                 ReviewItem(category = "AI Assistant", value = name, willInstall = true)
             }
         }
@@ -478,10 +480,10 @@ private fun hasAnyInstallation(selections: OnboardingSelections, installed: Inst
     if (selections.installGitHubCLI && !installed.gh) return true
     selections.aiAssistants.forEach { id ->
         val aiInstalled = when (id) {
-            "claude-code" -> installed.claudeCode
-            "gemini-cli" -> installed.gemini
-            "codex" -> installed.codex
-            "opencode" -> installed.opencode
+            AIAssistantIds.CLAUDE_CODE -> installed.claudeCode
+            AIAssistantIds.GEMINI_CLI -> installed.gemini
+            AIAssistantIds.CODEX -> installed.codex
+            AIAssistantIds.OPENCODE -> installed.opencode
             else -> true
         }
         if (!aiInstalled) return true

@@ -9,7 +9,6 @@ import ai.rever.bossterm.compose.util.UrlOpener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 /**
  * Provides context menu items for shell customization tools (Starship, etc.).
@@ -29,37 +28,6 @@ class ShellCustomizationMenuProvider {
     private var zshInstalled: Boolean? = null
     private var bashInstalled: Boolean? = null
     private var fishInstalled: Boolean? = null
-
-    /**
-     * Detect if a command is installed by checking `which`.
-     */
-    private fun isCommandInstalled(command: String): Boolean {
-        return try {
-            val process = ProcessBuilder("which", command)
-                .redirectErrorStream(true)
-                .start()
-            val completed = process.waitFor(2, TimeUnit.SECONDS)
-            completed && process.exitValue() == 0
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    /**
-     * Detect if Oh My Zsh is installed by checking ~/.oh-my-zsh directory.
-     */
-    private fun isOhMyZshInstalled(): Boolean {
-        val home = System.getProperty("user.home") ?: return false
-        return File(home, ".oh-my-zsh").isDirectory
-    }
-
-    /**
-     * Detect if Prezto is installed by checking ~/.zprezto directory.
-     */
-    private fun isPreztoInstalled(): Boolean {
-        val home = System.getProperty("user.home") ?: return false
-        return File(home, ".zprezto").isDirectory
-    }
 
     /**
      * Get the user's default shell from $SHELL environment variable.
@@ -85,12 +53,12 @@ class ShellCustomizationMenuProvider {
      * Refresh installation status for shell customization tools.
      */
     suspend fun refreshStatus() = withContext(Dispatchers.IO) {
-        starshipInstalled = isCommandInstalled("starship")
-        ohmyzshInstalled = isOhMyZshInstalled()
-        preztoInstalled = isPreztoInstalled()
-        zshInstalled = isCommandInstalled("zsh")
-        bashInstalled = isCommandInstalled("bash")
-        fishInstalled = isCommandInstalled("fish")
+        starshipInstalled = ShellCustomizationUtils.isStarshipInstalled()
+        ohmyzshInstalled = ShellCustomizationUtils.isOhMyZshInstalled()
+        preztoInstalled = ShellCustomizationUtils.isPreztoInstalled()
+        zshInstalled = ShellCustomizationUtils.isCommandInstalled("zsh")
+        bashInstalled = ShellCustomizationUtils.isCommandInstalled("bash")
+        fishInstalled = ShellCustomizationUtils.isCommandInstalled("fish")
     }
 
     /**
@@ -123,33 +91,7 @@ class ShellCustomizationMenuProvider {
      */
     fun getFishStatus(): Boolean? = fishInstalled
 
-    // ===== Uninstall Commands (reusable) =====
-
-    /**
-     * Get command to uninstall Starship (removes binary and config lines).
-     */
-    private fun getStarshipUninstallCommand(): String {
-        // Use sed -i.bak for cross-platform compatibility, then remove backup
-        return "sed -i.bak '/starship init/d' ~/.bashrc 2>/dev/null; rm -f ~/.bashrc.bak 2>/dev/null; " +
-            "sed -i.bak '/starship init/d' ~/.zshrc 2>/dev/null; rm -f ~/.zshrc.bak 2>/dev/null; " +
-            "sed -i.bak '/starship init/d' ~/.config/fish/config.fish 2>/dev/null; rm -f ~/.config/fish/config.fish.bak 2>/dev/null; " +
-            "sudo rm -f \"\$(which starship 2>/dev/null)\" 2>/dev/null; " +
-            "echo '✓ Starship uninstalled'"
-    }
-
-    /**
-     * Get command to uninstall Oh My Zsh.
-     */
-    private fun getOhMyZshUninstallCommand(): String {
-        return "env ZSH=\"\$HOME/.oh-my-zsh\" sh \"\$HOME/.oh-my-zsh/tools/uninstall.sh\" --unattended && echo '✓ Oh My Zsh uninstalled'"
-    }
-
-    /**
-     * Get command to uninstall Prezto.
-     */
-    private fun getPreztoUninstallCommand(): String {
-        return "rm -rf ~/.zprezto ~/.zshrc ~/.zlogin ~/.zlogout ~/.zpreztorc ~/.zprofile ~/.zshenv && echo '✓ Prezto uninstalled'"
-    }
+    // ===== Uninstall Commands (delegated to ShellCustomizationUtils) =====
 
     /**
      * Build install command that first uninstalls conflicting tools.
@@ -160,24 +102,20 @@ class ShellCustomizationMenuProvider {
         uninstallOhMyZsh: Boolean = false,
         uninstallPrezto: Boolean = false
     ): String {
-        val parts = mutableListOf<String>()
-
-        if (uninstallStarship && (starshipInstalled == true)) {
-            parts.add(getStarshipUninstallCommand())
-        }
-        if (uninstallOhMyZsh && (ohmyzshInstalled == true)) {
-            parts.add(getOhMyZshUninstallCommand())
-        }
-        if (uninstallPrezto && (preztoInstalled == true)) {
-            parts.add(getPreztoUninstallCommand())
-        }
-        parts.add(installCmd)
-
-        return parts.joinToString(" && ")
+        return ShellCustomizationUtils.buildInstallWithUninstall(
+            installCmd = installCmd,
+            uninstallStarship = uninstallStarship,
+            uninstallOhMyZsh = uninstallOhMyZsh,
+            uninstallPrezto = uninstallPrezto,
+            checkStarshipInstalled = starshipInstalled,
+            checkOhMyZshInstalled = ohmyzshInstalled,
+            checkPreztoInstalled = preztoInstalled
+        )
     }
 
     /**
      * Get context menu items for shell customization.
+     * Only shows installed shell customization tools and the user's default shell.
      *
      * @param terminalWriter Function to write commands to terminal
      * @param onInstallRequest Callback for install requests (toolId, command, npmCommand)
@@ -190,233 +128,35 @@ class ShellCustomizationMenuProvider {
         statusOverride: Map<String, Boolean>? = null
     ): List<ContextMenuElement> {
         val isStarshipInstalled = statusOverride?.get("starship")
-            ?: (starshipInstalled ?: isCommandInstalled("starship"))
+            ?: (starshipInstalled ?: ShellCustomizationUtils.isStarshipInstalled())
         val isOhMyZshInstalled = statusOverride?.get("oh-my-zsh")
-            ?: (ohmyzshInstalled ?: isOhMyZshInstalled())
+            ?: (ohmyzshInstalled ?: ShellCustomizationUtils.isOhMyZshInstalled())
+        val isPreztoInstalled = statusOverride?.get("prezto")
+            ?: (preztoInstalled ?: ShellCustomizationUtils.isPreztoInstalled())
 
         val shellItems = mutableListOf<ContextMenuElement>()
 
-        // Starship menu
-        if (!isStarshipInstalled) {
-            // Not installed: Install + Learn More submenu
-            shellItems.add(
-                ContextMenuSubmenu(
-                    id = "starship_submenu",
-                    label = "Starship",
-                    items = listOf(
-                        ContextMenuItem(
-                            id = "starship_install",
-                            label = "Install",
-                            action = {
-                                if (onInstallRequest != null) {
-                                    // When default shell is Zsh, uninstall Oh My Zsh/Prezto first
-                                    val installCmd = if (getDefaultShell() == "zsh") {
-                                        buildInstallWithUninstall(
-                                            AIAssistantLauncher.getStarshipInstallCommand(),
-                                            uninstallOhMyZsh = true,
-                                            uninstallPrezto = true
-                                        )
-                                    } else {
-                                        AIAssistantLauncher.getStarshipInstallCommand()
-                                    }
-                                    onInstallRequest("starship", installCmd, null)
-                                } else {
-                                    UrlOpener.open("https://starship.rs/")
-                                }
-                            }
-                        ),
-                        ContextMenuItem(
-                            id = "starship_learnmore",
-                            label = "Learn More",
-                            action = { UrlOpener.open("https://starship.rs/") }
-                        )
-                    )
-                )
-            )
-        } else {
-            // Installed: Configuration submenu
+        // Only show installed shell customization tools
+        if (isStarshipInstalled) {
             shellItems.add(buildStarshipMenu(terminalWriter, onInstallRequest))
         }
 
-        // Check if Zsh is installed (needed for Oh My Zsh)
-        val isZshInstalled = statusOverride?.get("zsh")
-            ?: (zshInstalled ?: isCommandInstalled("zsh"))
-
-        // Oh My Zsh menu (only show if Zsh is installed)
-        if (isZshInstalled) {
-            if (!isOhMyZshInstalled) {
-                // Not installed: Install + Learn More submenu
-                shellItems.add(
-                    ContextMenuSubmenu(
-                        id = "ohmyzsh_submenu",
-                        label = "Oh My Zsh",
-                        items = listOf(
-                            ContextMenuItem(
-                                id = "ohmyzsh_install",
-                                label = "Install",
-                                action = {
-                                    if (onInstallRequest != null) {
-                                        // Uninstall Prezto (always) and Starship (if configured for Zsh)
-                                        val installCmd = buildInstallWithUninstall(
-                                            AIAssistantLauncher.getOhMyZshInstallCommand(),
-                                            uninstallStarship = isStarshipConfiguredForZsh(),
-                                            uninstallPrezto = true
-                                        )
-                                        onInstallRequest("oh-my-zsh", installCmd, null)
-                                    } else {
-                                        UrlOpener.open("https://ohmyz.sh/")
-                                    }
-                                }
-                            ),
-                            ContextMenuItem(
-                                id = "ohmyzsh_learnmore",
-                                label = "Learn More",
-                                action = { UrlOpener.open("https://ohmyz.sh/") }
-                            )
-                        )
-                    )
-                )
-            } else {
-                // Installed: Configuration submenu
-                shellItems.add(buildOhMyZshMenu(terminalWriter, onInstallRequest))
-            }
-
-            // Prezto menu (only show if Zsh is installed)
-            val isPreztoInstalled = statusOverride?.get("prezto")
-                ?: (preztoInstalled ?: isPreztoInstalled())
-            if (!isPreztoInstalled) {
-                // Not installed: Install + Learn More submenu
-                shellItems.add(
-                    ContextMenuSubmenu(
-                        id = "prezto_submenu",
-                        label = "Prezto",
-                        items = listOf(
-                            ContextMenuItem(
-                                id = "prezto_install",
-                                label = "Install",
-                                action = {
-                                    if (onInstallRequest != null) {
-                                        // Uninstall Oh My Zsh (always) and Starship (if configured for Zsh)
-                                        val installCmd = buildInstallWithUninstall(
-                                            getPreztoInstallCommand(),
-                                            uninstallStarship = isStarshipConfiguredForZsh(),
-                                            uninstallOhMyZsh = true
-                                        )
-                                        onInstallRequest("prezto", installCmd, null)
-                                    } else {
-                                        UrlOpener.open("https://github.com/sorin-ionescu/prezto")
-                                    }
-                                }
-                            ),
-                            ContextMenuItem(
-                                id = "prezto_learnmore",
-                                label = "Learn More",
-                                action = { UrlOpener.open("https://github.com/sorin-ionescu/prezto") }
-                            )
-                        )
-                    )
-                )
-            } else {
-                // Installed: Configuration submenu
-                shellItems.add(buildPreztoMenu(terminalWriter, onInstallRequest))
-            }
+        if (isOhMyZshInstalled) {
+            shellItems.add(buildOhMyZshMenu(terminalWriter, onInstallRequest))
         }
 
-        // Shells section separator
-        shellItems.add(ContextMenuSection(id = "shells_section", label = "Shells"))
-
-        // Zsh menu
-        if (!isZshInstalled) {
-            shellItems.add(
-                ContextMenuSubmenu(
-                    id = "zsh_submenu",
-                    label = "Zsh",
-                    items = listOf(
-                        ContextMenuItem(
-                            id = "zsh_install",
-                            label = "Install",
-                            action = {
-                                if (onInstallRequest != null) {
-                                    onInstallRequest("zsh", getZshInstallCommand(), null)
-                                } else {
-                                    terminalWriter("${getZshInstallCommand()}\n")
-                                }
-                            }
-                        ),
-                        ContextMenuItem(
-                            id = "zsh_learnmore",
-                            label = "Learn More",
-                            action = { UrlOpener.open("https://www.zsh.org/") }
-                        )
-                    )
-                )
-            )
-        } else {
-            shellItems.add(buildZshMenu(terminalWriter))
+        if (isPreztoInstalled) {
+            shellItems.add(buildPreztoMenu(terminalWriter, onInstallRequest))
         }
 
-        // Bash menu
-        val isBashInstalled = statusOverride?.get("bash")
-            ?: (bashInstalled ?: isCommandInstalled("bash"))
-        if (!isBashInstalled) {
-            shellItems.add(
-                ContextMenuSubmenu(
-                    id = "bash_submenu",
-                    label = "Bash",
-                    items = listOf(
-                        ContextMenuItem(
-                            id = "bash_install",
-                            label = "Install",
-                            action = {
-                                if (onInstallRequest != null) {
-                                    onInstallRequest("bash", getBashInstallCommand(), null)
-                                } else {
-                                    terminalWriter("${getBashInstallCommand()}\n")
-                                }
-                            }
-                        ),
-                        ContextMenuItem(
-                            id = "bash_learnmore",
-                            label = "Learn More",
-                            action = { UrlOpener.open("https://www.gnu.org/software/bash/") }
-                        )
-                    )
-                )
-            )
-        } else {
-            shellItems.add(buildBashMenu(terminalWriter))
-        }
-
-        // Fish menu
-        val isFishInstalled = statusOverride?.get("fish")
-            ?: (fishInstalled ?: isCommandInstalled("fish"))
-        if (!isFishInstalled) {
-            shellItems.add(
-                ContextMenuSubmenu(
-                    id = "fish_submenu",
-                    label = "Fish",
-                    items = listOf(
-                        ContextMenuItem(
-                            id = "fish_install",
-                            label = "Install",
-                            action = {
-                                if (onInstallRequest != null) {
-                                    onInstallRequest("fish", getFishInstallCommand(), null)
-                                } else {
-                                    terminalWriter("${getFishInstallCommand()}\n")
-                                }
-                            }
-                        ),
-                        ContextMenuItem(
-                            id = "fish_learnmore",
-                            label = "Learn More",
-                            action = { UrlOpener.open("https://fishshell.com/") }
-                        )
-                    )
-                )
-            )
-        } else {
-            shellItems.add(buildFishMenu(terminalWriter))
+        // Add default shell menu (just the current user's default shell)
+        val defaultShell = getDefaultShell()
+        shellItems.add(ContextMenuSection(id = "default_shell_section", label = "Default Shell"))
+        when (defaultShell) {
+            "zsh" -> shellItems.add(buildZshMenu(terminalWriter))
+            "bash" -> shellItems.add(buildBashMenu(terminalWriter))
+            "fish" -> shellItems.add(buildFishMenu(terminalWriter))
+            else -> shellItems.add(buildBashMenu(terminalWriter)) // Fallback to bash
         }
 
         return if (shellItems.isEmpty()) {
@@ -543,12 +283,8 @@ class ShellCustomizationMenuProvider {
                     id = "starship_uninstall",
                     label = "Uninstall",
                     action = {
-                        // Remove config lines first, then binary, then restart shell
-                        val uninstallCmd = "sed -i.bak '/starship init/d' ~/.bashrc 2>/dev/null; rm -f ~/.bashrc.bak 2>/dev/null; " +
-                            "sed -i.bak '/starship init/d' ~/.zshrc 2>/dev/null; rm -f ~/.zshrc.bak 2>/dev/null; " +
-                            "sed -i.bak '/starship init/d' ~/.config/fish/config.fish 2>/dev/null; rm -f ~/.config/fish/config.fish.bak 2>/dev/null; " +
-                            "sudo rm -f \"\$(which starship 2>/dev/null)\" 2>/dev/null; " +
-                            "echo '✓ Starship uninstalled. Restarting shell...' && exec \$SHELL -l"
+                        val uninstallCmd = ShellCustomizationUtils.getStarshipUninstallCommand() +
+                            " && echo 'Restarting shell...' && exec \$SHELL -l"
                         if (onInstallRequest != null) {
                             onInstallRequest("starship-uninstall", uninstallCmd, null)
                         } else {

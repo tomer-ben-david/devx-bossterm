@@ -19,6 +19,8 @@ import ai.rever.bossterm.compose.settings.SettingsTheme.BorderColor
 import ai.rever.bossterm.compose.settings.SettingsTheme.SurfaceColor
 import ai.rever.bossterm.compose.settings.SettingsTheme.TextPrimary
 import ai.rever.bossterm.compose.settings.SettingsTheme.TextSecondary
+import ai.rever.bossterm.compose.ai.AIAssistantIds
+import ai.rever.bossterm.compose.shell.ShellCustomizationUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -94,7 +96,7 @@ data class OnboardingSelections(
     val shellCustomization: ShellCustomizationChoice = ShellCustomizationChoice.STARSHIP,
     val installGit: Boolean = true,
     val installGitHubCLI: Boolean = true,
-    val aiAssistants: Set<String> = setOf("claude-code", "gemini-cli", "codex", "opencode")
+    val aiAssistants: Set<String> = AIAssistantIds.ALL_AI_ASSISTANTS
 )
 
 /**
@@ -414,10 +416,10 @@ private fun hasAnySelection(selections: OnboardingSelections, installed: Install
     if (selections.aiAssistants.isNotEmpty()) {
         selections.aiAssistants.forEach { id ->
             val aiInstalled = when (id) {
-                "claude-code" -> installed.claudeCode
-                "gemini-cli" -> installed.gemini
-                "codex" -> installed.codex
-                "opencode" -> installed.opencode
+                AIAssistantIds.CLAUDE_CODE -> installed.claudeCode
+                AIAssistantIds.GEMINI_CLI -> installed.gemini
+                AIAssistantIds.CODEX -> installed.codex
+                AIAssistantIds.OPENCODE -> installed.opencode
                 else -> true
             }
             if (!aiInstalled) return true
@@ -434,9 +436,9 @@ suspend fun detectInstalledTools(): InstalledTools = withContext(Dispatchers.IO)
         zsh = isCommandInstalled("zsh"),
         bash = isCommandInstalled("bash"),
         fish = isCommandInstalled("fish"),
-        starship = isCommandInstalled("starship"),
-        ohMyZsh = File(System.getProperty("user.home") ?: "", ".oh-my-zsh").isDirectory,
-        prezto = File(System.getProperty("user.home") ?: "", ".zprezto").isDirectory,
+        starship = ShellCustomizationUtils.isStarshipInstalled() || isCommandInstalled("starship"),
+        ohMyZsh = ShellCustomizationUtils.isOhMyZshInstalled(),
+        prezto = ShellCustomizationUtils.isPreztoInstalled(),
         git = isCommandInstalled("git"),
         gh = isCommandInstalled("gh"),
         claudeCode = isCommandInstalled("claude"),
@@ -610,28 +612,10 @@ private fun buildInstallCommandInternal(selections: OnboardingSelections, instal
     }
 
     // Shell customization (with conflict removal)
-    // Define uninstall commands (needed for both installing new tools and NONE option)
-    val uninstallOhMyZsh = "[ -d ~/.oh-my-zsh ] && { " +
-        "rm -rf ~/.oh-my-zsh && " +
-        "if [ -f ~/.zshrc.pre-oh-my-zsh ]; then " +
-        "  mv ~/.zshrc.pre-oh-my-zsh ~/.zshrc; " +
-        "else " +
-        "  sed -i.bak '/oh-my-zsh/d' ~/.zshrc 2>/dev/null || sed -i '' '/oh-my-zsh/d' ~/.zshrc 2>/dev/null; " +
-        "  sed -i.bak '/ZSH_THEME/d' ~/.zshrc 2>/dev/null || sed -i '' '/ZSH_THEME/d' ~/.zshrc 2>/dev/null; " +
-        "  sed -i.bak '/^plugins=/d' ~/.zshrc 2>/dev/null || sed -i '' '/^plugins=/d' ~/.zshrc 2>/dev/null; " +
-        "  sed -i.bak '/^source.*oh-my-zsh/d' ~/.zshrc 2>/dev/null || sed -i '' '/^source.*oh-my-zsh/d' ~/.zshrc 2>/dev/null; " +
-        "fi && " +
-        "echo '✓ Oh My Zsh removed'; } || true"
-    val uninstallPrezto = "[ -d ~/.zprezto ] && { rm -rf ~/.zprezto ~/.zpreztorc && echo '✓ Prezto removed'; } || true"
-    val uninstallStarship = "{ " +
-        "command -v starship >/dev/null 2>&1 && { " +
-        "  rm -f \"\$(command -v starship)\" 2>/dev/null || sudo rm -f \"\$(command -v starship)\" 2>/dev/null; " +
-        "  rm -rf ~/.config/starship.toml ~/.cache/starship 2>/dev/null; " +
-        "}; " +
-        "[ -f ~/.zshrc ] && { sed -i.bak '/starship init/d' ~/.zshrc 2>/dev/null || sed -i '' '/starship init/d' ~/.zshrc 2>/dev/null; }; " +
-        "[ -f ~/.bashrc ] && { sed -i.bak '/starship init/d' ~/.bashrc 2>/dev/null || sed -i '' '/starship init/d' ~/.bashrc 2>/dev/null; }; " +
-        "[ -f ~/.config/fish/config.fish ] && { sed -i.bak '/starship init/d' ~/.config/fish/config.fish 2>/dev/null || sed -i '' '/starship init/d' ~/.config/fish/config.fish 2>/dev/null; }; " +
-        "echo '✓ Starship removed'; } || true"
+    // Use shared uninstall commands from ShellCustomizationUtils
+    val uninstallOhMyZsh = ShellCustomizationUtils.getOhMyZshUninstallCommand()
+    val uninstallPrezto = ShellCustomizationUtils.getPreztoUninstallCommand()
+    val uninstallStarship = ShellCustomizationUtils.getStarshipUninstallCommand()
 
     // Handle NONE option - uninstall all existing customizations
     if (selections.shellCustomization == ShellCustomizationChoice.NONE) {
@@ -726,18 +710,18 @@ private fun buildInstallCommandInternal(selections: OnboardingSelections, instal
     val aiToInstall = mutableListOf<Pair<String, String>>() // id to npm package
     selections.aiAssistants.forEach { id ->
         val aiInstalled = when (id) {
-            "claude-code" -> installed.claudeCode
-            "gemini-cli" -> installed.gemini
-            "codex" -> installed.codex
-            "opencode" -> installed.opencode
+            AIAssistantIds.CLAUDE_CODE -> installed.claudeCode
+            AIAssistantIds.GEMINI_CLI -> installed.gemini
+            AIAssistantIds.CODEX -> installed.codex
+            AIAssistantIds.OPENCODE -> installed.opencode
             else -> true
         }
         if (!aiInstalled) {
             val npmPkg = when (id) {
-                "claude-code" -> "@anthropic-ai/claude-code"
-                "gemini-cli" -> "@google/gemini-cli"
-                "codex" -> "@openai/codex"
-                "opencode" -> "opencode-ai"
+                AIAssistantIds.CLAUDE_CODE -> "@anthropic-ai/claude-code"
+                AIAssistantIds.GEMINI_CLI -> "@google/gemini-cli"
+                AIAssistantIds.CODEX -> "@openai/codex"
+                AIAssistantIds.OPENCODE -> "opencode-ai"
                 else -> null
             }
             if (npmPkg != null) {

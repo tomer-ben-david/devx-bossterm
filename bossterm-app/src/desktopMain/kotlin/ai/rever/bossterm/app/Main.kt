@@ -18,6 +18,7 @@ import ai.rever.bossterm.compose.notification.NotificationService
 import ai.rever.bossterm.compose.onboarding.OnboardingWizard
 import ai.rever.bossterm.compose.settings.SettingsManager
 import ai.rever.bossterm.compose.settings.SettingsWindow
+import ai.rever.bossterm.compose.shell.ShellCustomizationUtils
 import ai.rever.bossterm.compose.update.UpdateBanner
 import ai.rever.bossterm.compose.update.UpdateManager
 import ai.rever.bossterm.compose.window.CustomTitleBar
@@ -72,6 +73,11 @@ fun main() {
                 // Onboarding wizard state
                 var showOnboardingWizard by remember { mutableStateOf(false) }
 
+                // Shell customization tool installation status
+                var isStarshipInstalled by remember { mutableStateOf(false) }
+                var isOhMyZshInstalled by remember { mutableStateOf(false) }
+                var isPreztoInstalled by remember { mutableStateOf(false) }
+
                 // Check for first run (CLI not installed or onboarding not completed)
                 LaunchedEffect(Unit) {
                     // Check if this is the first window (avoid showing on every window)
@@ -92,6 +98,15 @@ fun main() {
                 LaunchedEffect(showCLIInstallDialog) {
                     if (!showCLIInstallDialog) {
                         isCLIInstalled = CLIInstaller.isInstalled()
+                    }
+                }
+
+                // Check shell customization tool installation status on startup
+                LaunchedEffect(Unit) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        isStarshipInstalled = ShellCustomizationUtils.isStarshipInstalled()
+                        isOhMyZshInstalled = ShellCustomizationUtils.isOhMyZshInstalled()
+                        isPreztoInstalled = ShellCustomizationUtils.isPreztoInstalled()
                     }
                 }
 
@@ -422,7 +437,7 @@ fun main() {
                                 }
                             }
                             Separator()
-                            // Shell Configuration submenu
+                            // Shell Configuration submenu (always show - edit config files is always useful)
                             Menu("Shell Config") {
                                 Item("Edit .zshrc", onClick = { window.menuActions.onEditZshrc?.invoke() })
                                 Item("Edit .bashrc", onClick = { window.menuActions.onEditBashrc?.invoke() })
@@ -430,23 +445,29 @@ fun main() {
                                 Separator()
                                 Item("Reload Config", onClick = { window.menuActions.onReloadShellConfig?.invoke() })
                             }
-                            // Starship submenu
-                            Menu("Starship") {
-                                Item("Edit Config", onClick = { window.menuActions.onStarshipEditConfig?.invoke() })
-                                Item("Apply Preset...", onClick = { window.menuActions.onStarshipPresets?.invoke() })
+                            // Starship submenu (only if installed)
+                            if (isStarshipInstalled) {
+                                Menu("Starship") {
+                                    Item("Edit Config", onClick = { window.menuActions.onStarshipEditConfig?.invoke() })
+                                    Item("Apply Preset...", onClick = { window.menuActions.onStarshipPresets?.invoke() })
+                                }
                             }
-                            // Oh My Zsh submenu
-                            Menu("Oh My Zsh") {
-                                Item("Update", onClick = { window.menuActions.onOhMyZshUpdate?.invoke() })
-                                Item("List Themes", onClick = { window.menuActions.onOhMyZshThemes?.invoke() })
-                                Item("List Plugins", onClick = { window.menuActions.onOhMyZshPlugins?.invoke() })
+                            // Oh My Zsh submenu (only if installed)
+                            if (isOhMyZshInstalled) {
+                                Menu("Oh My Zsh") {
+                                    Item("Update", onClick = { window.menuActions.onOhMyZshUpdate?.invoke() })
+                                    Item("List Themes", onClick = { window.menuActions.onOhMyZshThemes?.invoke() })
+                                    Item("List Plugins", onClick = { window.menuActions.onOhMyZshPlugins?.invoke() })
+                                }
                             }
-                            // Prezto submenu
-                            Menu("Prezto") {
-                                Item("Update", onClick = { window.menuActions.onPreztoUpdate?.invoke() })
-                                Item("Edit Config", onClick = { window.menuActions.onPreztoEditConfig?.invoke() })
-                                Item("List Themes", onClick = { window.menuActions.onPreztoListThemes?.invoke() })
-                                Item("Show Modules", onClick = { window.menuActions.onPreztoShowModules?.invoke() })
+                            // Prezto submenu (only if installed)
+                            if (isPreztoInstalled) {
+                                Menu("Prezto") {
+                                    Item("Update", onClick = { window.menuActions.onPreztoUpdate?.invoke() })
+                                    Item("Edit Config", onClick = { window.menuActions.onPreztoEditConfig?.invoke() })
+                                    Item("List Themes", onClick = { window.menuActions.onPreztoListThemes?.invoke() })
+                                    Item("Show Modules", onClick = { window.menuActions.onPreztoShowModules?.invoke() })
+                                }
                             }
                         }
 
