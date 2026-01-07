@@ -28,7 +28,7 @@
     .\install.ps1 -Uninstall
     Uninstall BossTerm
 .EXAMPLE
-    iwr -useb https://risaboss.com/install.ps1 | iex
+    iwr -useb https://raw.githubusercontent.com/kshivang/BossTerm/master/install.ps1 | iex
     Install from URL (curl pattern)
 .LINK
     https://github.com/kshivang/BossTerm
@@ -98,7 +98,7 @@ Usage:
   .\install.ps1 [OPTIONS]
 
   # Or via URL:
-  iwr -useb https://risaboss.com/install.ps1 | iex
+  iwr -useb https://raw.githubusercontent.com/kshivang/BossTerm/master/install.ps1 | iex
 
 Options:
   -Version <version>    Install specific version (default: latest)
@@ -284,7 +284,7 @@ setlocal
 set "BOSSTERM_JAR=$script:JAR_PATH"
 if not exist "%BOSSTERM_JAR%" (
     echo Error: BossTerm not found at %BOSSTERM_JAR%
-    echo Please run: iwr -useb https://risaboss.com/install.ps1 ^| iex
+    echo Please run: iwr -useb https://raw.githubusercontent.com/kshivang/BossTerm/master/install.ps1 ^| iex
     exit /b 1
 )
 java -jar "%BOSSTERM_JAR%" %*

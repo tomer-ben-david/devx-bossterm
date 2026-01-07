@@ -66,13 +66,13 @@ Alacritty  ███████████████████████
 Install BossTerm with a single command:
 
 ```bash
-curl -fsSL https://risaboss.com/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash
 ```
 
 Or install a specific version:
 
 ```bash
-curl -fsSL https://risaboss.com/install.sh | bash -s -- --version 1.0.5
+curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --version 1.0.5
 ```
 
 The installer automatically detects your platform and uses the best method (Homebrew on macOS, Deb/RPM on Linux).
@@ -80,7 +80,7 @@ The installer automatically detects your platform and uses the best method (Home
 To uninstall:
 
 ```bash
-curl -fsSL https://risaboss.com/install.sh | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --uninstall
 ```
 
 ---
@@ -127,13 +127,13 @@ sudo snap install bossterm_*.snap --classic --dangerous
 
 ```powershell
 # Install latest version
-iwr -useb https://risaboss.com/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/kshivang/BossTerm/master/install.ps1 | iex
 
 # Install specific version
-& ([scriptblock]::Create((iwr -useb https://risaboss.com/install.ps1))) -Version 1.0.5
+& ([scriptblock]::Create((iwr -useb https://raw.githubusercontent.com/kshivang/BossTerm/master/install.ps1))) -Version 1.0.5
 
 # Uninstall
-& ([scriptblock]::Create((iwr -useb https://risaboss.com/install.ps1))) -Uninstall
+& ([scriptblock]::Create((iwr -useb https://raw.githubusercontent.com/kshivang/BossTerm/master/install.ps1))) -Uninstall
 ```
 
 Or run from the repository:
@@ -150,7 +150,7 @@ For systems without PowerShell or older Windows versions:
 
 ```cmd
 :: Download and run
-curl -fsSL https://risaboss.com/install.bat -o install.bat && install.bat
+curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.bat -o install.bat && install.bat
 
 :: Or from repository
 install.bat

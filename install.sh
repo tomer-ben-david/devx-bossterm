@@ -4,9 +4,9 @@
 # https://github.com/kshivang/BossTerm
 #
 # Usage:
-#   curl -fsSL https://risaboss.com/install.sh | bash
-#   curl -fsSL https://risaboss.com/install.sh | bash -s -- --version 1.0.5
-#   curl -fsSL https://risaboss.com/install.sh | bash -s -- --uninstall
+#   curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --version 1.0.5
+#   curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --uninstall
 #
 # Or run locally:
 #   ./install.sh
@@ -640,7 +640,7 @@ VERSION="1.0.0"
 check_app() {
     if [ ! -d "$APP_PATH" ]; then
         echo "Error: BossTerm.app not found at $APP_PATH"
-        echo "Run: curl -fsSL https://risaboss.com/install.sh | bash"
+        echo "Run: curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash"
         exit 1
     fi
 }
@@ -769,7 +769,7 @@ check_app() {
     if [ -z "$APP_PATH" ]; then
         echo "Error: BossTerm not found"
         echo ""
-        echo "Install with: curl -fsSL https://risaboss.com/install.sh | bash"
+        echo "Install with: curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash"
         exit 1
     fi
 }
@@ -1007,7 +1007,7 @@ show_help() {
 BossTerm Installation Script v${SCRIPT_VERSION}
 
 Usage:
-  curl -fsSL https://risaboss.com/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash
   ./install.sh [OPTIONS]
 
 Options:
@@ -1025,10 +1025,10 @@ Installation Methods:
 
 Examples:
   # Install latest version (auto-detect best method)
-  curl -fsSL https://risaboss.com/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash
 
   # Install specific version
-  curl -fsSL https://risaboss.com/install.sh | bash -s -- --version 1.0.5
+  curl -fsSL https://raw.githubusercontent.com/kshivang/BossTerm/master/install.sh | bash -s -- --version 1.0.5
 
   # Install using specific method
   ./install.sh --method homebrew
