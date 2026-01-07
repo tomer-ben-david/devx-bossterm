@@ -136,24 +136,34 @@ fun AIAssistantInstallDialog(
                         }
 
                         is InstallDialogState.Success -> {
-                            // Brief success state before auto-close
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
+                            // Success state with close button
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
                             ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "✓",
-                                        color = Color(0xFF4CAF50),
-                                        fontSize = 48.sp
+                                Text(
+                                    text = "✓",
+                                    color = Color(0xFF4CAF50),
+                                    fontSize = 48.sp
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Installation complete!",
+                                    color = Color(0xFF4CAF50),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Button(
+                                    onClick = onDismiss,
+                                    colors = ButtonDefaults.buttonColors(
+                                        backgroundColor = Color(0xFF4CAF50)
                                     )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        text = "Installation complete!",
-                                        color = Color(0xFF4CAF50),
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
+                                ) {
+                                    Text("Close", color = Color.White)
                                 }
                             }
                         }
@@ -203,11 +213,4 @@ fun AIAssistantInstallDialog(
         }
     }
 
-    // Auto-close on success after brief delay
-    LaunchedEffect(dialogState) {
-        if (dialogState == InstallDialogState.Success) {
-            kotlinx.coroutines.delay(1500)
-            onDismiss()
-        }
-    }
 }
