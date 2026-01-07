@@ -173,15 +173,85 @@ class VersionControlMenuProvider {
                 label = "git branch -a",
                 action = { terminalWriter("git branch -a\n") }
             ),
-            ContextMenuItem(
-                id = "git_checkout",
-                label = "git checkout ...",
-                action = { terminalWriter("git checkout ") }
+            ContextMenuSubmenu(
+                id = "git_checkout_submenu",
+                label = "git checkout",
+                items = listOf(
+                    ContextMenuItem(
+                        id = "git_checkout_prev",
+                        label = "Previous branch (-)",
+                        action = { terminalWriter("git checkout -\n") }
+                    ),
+                    ContextMenuItem(
+                        id = "git_checkout_main",
+                        label = "main",
+                        action = { terminalWriter("git checkout main\n") }
+                    ),
+                    ContextMenuItem(
+                        id = "git_checkout_master",
+                        label = "master",
+                        action = { terminalWriter("git checkout master\n") }
+                    ),
+                    ContextMenuItem(
+                        id = "git_checkout_dev",
+                        label = "dev / develop",
+                        action = { terminalWriter("git checkout dev || git checkout develop\n") }
+                    ),
+                    ContextMenuSection(id = "git_checkout_new_section"),
+                    ContextMenuItem(
+                        id = "git_checkout_new",
+                        label = "New branch (-b) ...",
+                        action = { terminalWriter("git checkout -b ") }
+                    ),
+                    ContextMenuItem(
+                        id = "git_checkout_branch",
+                        label = "Other branch ...",
+                        action = { terminalWriter("git checkout ") }
+                    ),
+                    ContextMenuSection(id = "git_checkout_discard_section"),
+                    ContextMenuItem(
+                        id = "git_checkout_discard",
+                        label = "Discard all changes (-- .)",
+                        action = { terminalWriter("git checkout -- .\n") }
+                    )
+                )
             ),
-            ContextMenuItem(
-                id = "git_switch",
-                label = "git switch ...",
-                action = { terminalWriter("git switch ") }
+            ContextMenuSubmenu(
+                id = "git_switch_submenu",
+                label = "git switch",
+                items = listOf(
+                    ContextMenuItem(
+                        id = "git_switch_prev",
+                        label = "Previous branch (-)",
+                        action = { terminalWriter("git switch -\n") }
+                    ),
+                    ContextMenuItem(
+                        id = "git_switch_main",
+                        label = "main",
+                        action = { terminalWriter("git switch main\n") }
+                    ),
+                    ContextMenuItem(
+                        id = "git_switch_master",
+                        label = "master",
+                        action = { terminalWriter("git switch master\n") }
+                    ),
+                    ContextMenuItem(
+                        id = "git_switch_dev",
+                        label = "dev / develop",
+                        action = { terminalWriter("git switch dev || git switch develop\n") }
+                    ),
+                    ContextMenuSection(id = "git_switch_new_section"),
+                    ContextMenuItem(
+                        id = "git_switch_create",
+                        label = "Create new branch (-c) ...",
+                        action = { terminalWriter("git switch -c ") }
+                    ),
+                    ContextMenuItem(
+                        id = "git_switch_branch",
+                        label = "Other branch ...",
+                        action = { terminalWriter("git switch ") }
+                    )
+                )
             )
         )
 
