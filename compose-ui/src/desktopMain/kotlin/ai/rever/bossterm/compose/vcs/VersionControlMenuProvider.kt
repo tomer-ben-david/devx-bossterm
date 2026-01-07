@@ -5,10 +5,9 @@ import ai.rever.bossterm.compose.ContextMenuItem
 import ai.rever.bossterm.compose.ContextMenuSection
 import ai.rever.bossterm.compose.ContextMenuSubmenu
 import ai.rever.bossterm.compose.ai.AIAssistantLauncher
+import ai.rever.bossterm.compose.util.UrlOpener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.awt.Desktop
-import java.net.URI
 import java.util.concurrent.TimeUnit
 
 /**
@@ -670,53 +669,6 @@ class VersionControlMenuProvider {
      * Open URL in default browser.
      */
     private fun openUrl(url: String) {
-        val os = System.getProperty("os.name").lowercase()
-
-        try {
-            when {
-                os.contains("linux") -> openUrlOnLinux(url)
-                os.contains("mac") -> {
-                    ProcessBuilder("open", url).start()
-                }
-                os.contains("win") -> {
-                    ProcessBuilder("cmd", "/c", "start", "", url).start()
-                }
-                else -> {
-                    if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                        Desktop.getDesktop().browse(URI(url))
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            // Silently fail - user can manually visit the URL
-        }
-    }
-
-    /**
-     * Open URL on Linux using multiple fallback strategies.
-     */
-    private fun openUrlOnLinux(url: String) {
-        val browserCommands = listOf(
-            listOf("xdg-open", url),
-            listOf("sensible-browser", url),
-            listOf("x-www-browser", url),
-            listOf("gnome-open", url),
-            listOf("kde-open", url)
-        )
-
-        for (command in browserCommands) {
-            try {
-                val process = ProcessBuilder(command)
-                    .redirectErrorStream(true)
-                    .start()
-                // Give it a moment to fail if the command doesn't exist
-                Thread.sleep(100)
-                if (process.isAlive) {
-                    return // Success
-                }
-            } catch (e: Exception) {
-                // Try next command
-            }
-        }
+        UrlOpener.open(url)
     }
 }

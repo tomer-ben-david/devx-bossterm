@@ -1,9 +1,7 @@
 package ai.rever.bossterm.compose.ai
 
 import ai.rever.bossterm.compose.settings.AIAssistantConfigData
-import java.awt.Desktop
-import java.net.URI
-import java.util.concurrent.TimeUnit
+import ai.rever.bossterm.compose.util.UrlOpener
 
 /**
  * Generates commands for launching and installing AI assistants.
@@ -153,86 +151,7 @@ class AIAssistantLauncher {
      * Open the assistant's website in the default browser.
      */
     fun openWebsite(assistant: AIAssistantDefinition): Boolean {
-        return openUrl(assistant.websiteUrl)
-    }
-
-    /**
-     * Open a URL in the default browser.
-     */
-    private fun openUrl(url: String): Boolean {
-        val os = System.getProperty("os.name").lowercase()
-
-        return try {
-            when {
-                os.contains("linux") -> openUrlOnLinux(url)
-                os.contains("mac") -> {
-                    ProcessBuilder("open", url).start()
-                    true
-                }
-                os.contains("win") -> {
-                    ProcessBuilder("cmd", "/c", "start", "", url).start()
-                    true
-                }
-                else -> {
-                    if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                        Desktop.getDesktop().browse(URI(url))
-                        true
-                    } else {
-                        false
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            println("Failed to open URL: $url - ${e.message}")
-            false
-        }
-    }
-
-    /**
-     * Open URL on Linux using multiple fallback strategies.
-     */
-    private fun openUrlOnLinux(url: String): Boolean {
-        val browserCommands = listOf(
-            listOf("sensible-browser", url),
-            listOf("x-www-browser", url),
-            listOf("gnome-open", url),
-            listOf("kde-open", url),
-            listOf("firefox", url),
-            listOf("google-chrome", url),
-            listOf("chromium", url),
-            listOf("chromium-browser", url),
-            listOf("xdg-open", url)
-        )
-
-        for (command in browserCommands) {
-            try {
-                val whichProcess = ProcessBuilder("which", command[0])
-                    .redirectErrorStream(true)
-                    .start()
-                val completed = whichProcess.waitFor(2, TimeUnit.SECONDS)
-                val exists = completed && whichProcess.exitValue() == 0
-
-                if (exists) {
-                    ProcessBuilder(command)
-                        .redirectErrorStream(true)
-                        .start()
-                    return true
-                }
-            } catch (e: Exception) {
-                continue
-            }
-        }
-
-        return try {
-            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(URI(url))
-                true
-            } else {
-                false
-            }
-        } catch (e: Exception) {
-            false
-        }
+        return UrlOpener.open(assistant.websiteUrl)
     }
 
     private fun escapeShellArg(arg: String): String {
