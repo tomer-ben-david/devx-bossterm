@@ -40,6 +40,7 @@ import ai.rever.bossterm.compose.ai.AICommandInterceptor
 import ai.rever.bossterm.compose.ai.AIInstallDialogHost
 import ai.rever.bossterm.compose.ai.AIInstallDialogParams
 import ai.rever.bossterm.compose.ai.rememberAIAssistantState
+import ai.rever.bossterm.compose.vcs.VersionControlMenuProvider
 import ai.rever.bossterm.compose.terminal.BlockingTerminalDataStream
 import ai.rever.bossterm.compose.terminal.PerformanceMode
 import ai.rever.bossterm.compose.ui.ProperTerminal
@@ -238,6 +239,10 @@ fun EmbeddableTerminal(
     // Uses AtomicReference for safe access from suspend functions
     val detectionResultsHolder = remember { AtomicReference<Map<String, Boolean>?>(null) }
 
+    // Version Control menu provider (Git and GitHub CLI)
+    val vcsMenuProvider = remember { VersionControlMenuProvider() }
+    val vcsStatusHolder = remember { AtomicReference<Pair<Boolean, Boolean>?>(null) }
+
     // State for AI assistant installation dialog (uses shared AIInstallDialogParams)
     var installDialogState by remember { mutableStateOf<AIInstallDialogParams?>(null) }
 
@@ -340,43 +345,53 @@ fun EmbeddableTerminal(
             onNewWindow = onNewWindow,
             enableDebugPanel = false,  // Hide debug panel in embedded mode
             customContextMenuItems = contextMenuItems,
-            // Combine user-provided items with AI assistant items
-            customContextMenuItemsProvider = if (resolvedSettings.aiAssistantsEnabled || contextMenuItemsProvider != null) {
-                {
-                    val userItems = contextMenuItemsProvider?.invoke() ?: contextMenuItems
-                    if (resolvedSettings.aiAssistantsEnabled) {
-                        // Get working directory from session for launching AI assistants
-                        val workingDir = session.workingDirectory?.value
-                        val terminalWriter: (String) -> Unit = { text -> session.writeUserInput(text) }
-                        val aiItems = aiState.menuProvider.getMenuItems(
-                            terminalWriter = terminalWriter,
-                            onInstallRequest = { assistant, command, npmCommand ->
-                                installDialogState = AIInstallDialogParams(assistant, command, npmCommand, terminalWriter)
-                            },
-                            workingDirectory = workingDir,
-                            configs = resolvedSettings.aiAssistantConfigs,
-                            statusOverride = detectionResultsHolder.get()
-                        )
-                        userItems + aiItems
-                    } else {
-                        userItems
-                    }
+            // Combine user-provided items with AI assistant and VCS items
+            customContextMenuItemsProvider = {
+                val userItems = contextMenuItemsProvider?.invoke() ?: contextMenuItems
+                var items = userItems
+
+                // Add AI assistant menu items
+                if (resolvedSettings.aiAssistantsEnabled) {
+                    // Get working directory from session for launching AI assistants
+                    val workingDir = session.workingDirectory?.value
+                    val terminalWriter: (String) -> Unit = { text -> session.writeUserInput(text) }
+                    val aiItems = aiState.menuProvider.getMenuItems(
+                        terminalWriter = terminalWriter,
+                        onInstallRequest = { assistant, command, npmCommand ->
+                            installDialogState = AIInstallDialogParams(assistant, command, npmCommand, terminalWriter)
+                        },
+                        workingDirectory = workingDir,
+                        configs = resolvedSettings.aiAssistantConfigs,
+                        statusOverride = detectionResultsHolder.get()
+                    )
+                    items = items + aiItems
                 }
-            } else null,
+
+                // Add Version Control menu items
+                val terminalWriter: (String) -> Unit = { text -> session.writeUserInput(text) }
+                val vcsItems = vcsMenuProvider.getMenuItems(
+                    terminalWriter = terminalWriter,
+                    statusOverride = vcsStatusHolder.get()
+                )
+                items = items + vcsItems
+
+                items
+            },
             onContextMenuOpen = onContextMenuOpen,
-            // Combine user async callback with AI detection refresh
-            onContextMenuOpenAsync = if (resolvedSettings.aiAssistantsEnabled || onContextMenuOpenAsync != null) {
-                {
-                    // Run user callback first if provided
-                    onContextMenuOpenAsync?.invoke()
-                    // Refresh AI assistant detection before showing menu
-                    // Store results in shared holder for immediate access by customContextMenuItemsProvider
-                    if (resolvedSettings.aiAssistantsEnabled) {
-                        val freshStatus = aiState.detector.detectAll()
-                        detectionResultsHolder.set(freshStatus)
-                    }
+            // Combine user async callback with AI detection and VCS status refresh
+            onContextMenuOpenAsync = {
+                // Run user callback first if provided
+                onContextMenuOpenAsync?.invoke()
+                // Refresh AI assistant detection before showing menu
+                // Store results in shared holder for immediate access by customContextMenuItemsProvider
+                if (resolvedSettings.aiAssistantsEnabled) {
+                    val freshStatus = aiState.detector.detectAll()
+                    detectionResultsHolder.set(freshStatus)
                 }
-            } else null,
+                // Refresh VCS status
+                vcsMenuProvider.refreshStatus()
+                vcsStatusHolder.set(vcsMenuProvider.getStatus())
+            },
             onLinkClick = onLinkClick,
             hyperlinkRegistry = hyperlinkRegistry,
             modifier = modifier
