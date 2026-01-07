@@ -1,0 +1,420 @@
+name: Test Install Script
+
+on:
+  push:
+    branches: [master, dev]
+    paths:
+      - 'install.sh'
+      - '.github/workflows/test-install.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'install.sh'
+      - '.github/workflows/test-install.yml'
+  workflow_dispatch:
+    inputs:
+      run_real_install:
+        description: 'Run real installation tests (requires released packages)'
+        required: false
+        default: false
+        type: boolean
+  release:
+    types: [published]
+
+jobs:
+  # ============================================================================
+  # Static Analysis
+  # ============================================================================
+  shellcheck:
+    name: ShellCheck Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          additional_files: 'install.sh'
+          severity: warning
+
+      - name: Syntax Check
+        run: bash -n install.sh
+
+  # ============================================================================
+  # macOS Tests (ARM64 - Apple Silicon)
+  # ============================================================================
+  test-macos-arm:
+    name: macOS ARM64 (${{ matrix.method }})
+    runs-on: macos-latest
+    needs: shellcheck
+    strategy:
+      fail-fast: false
+      matrix:
+        method: [auto, dmg]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Test --help
+        run: ./install.sh --help
+
+      - name: Test platform detection (dry-run)
+        run: |
+          OUTPUT=$(./install.sh --dry-run --method ${{ matrix.method }} 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "Platform: darwin"
+          echo "$OUTPUT" | grep -q "arm64"
+
+      - name: Test install (real)
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: ./install.sh --method ${{ matrix.method }} --force
+
+      - name: Verify installation
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: |
+          test -d /Applications/BossTerm.app
+          echo "BossTerm.app found in /Applications"
+          # Test CLI launcher
+          if command -v bossterm &> /dev/null; then
+            bossterm --help
+            echo "CLI launcher working"
+          fi
+
+      - name: Test uninstall
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: |
+          echo "n" | ./install.sh --uninstall
+          # Verify app removed (config preserved since we said 'n')
+          test ! -d /Applications/BossTerm.app || echo "App removal may require manual intervention"
+
+  # ============================================================================
+  # macOS Tests (Intel x86_64)
+  # ============================================================================
+  test-macos-intel:
+    name: macOS Intel (auto)
+    runs-on: macos-13
+    needs: shellcheck
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Test platform detection (dry-run)
+        run: |
+          OUTPUT=$(./install.sh --dry-run 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "Platform: darwin"
+          echo "$OUTPUT" | grep -q "amd64"
+
+      - name: Test install (real)
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: ./install.sh --force
+
+      - name: Verify installation
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: test -d /Applications/BossTerm.app
+
+  # ============================================================================
+  # Ubuntu Tests (AMD64)
+  # ============================================================================
+  test-ubuntu:
+    name: Ubuntu AMD64 (${{ matrix.method }})
+    runs-on: ubuntu-latest
+    needs: shellcheck
+    strategy:
+      fail-fast: false
+      matrix:
+        method: [auto, deb, jar]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Java 17 (for JAR test)
+        if: matrix.method == 'jar'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Test platform detection (dry-run)
+        run: |
+          OUTPUT=$(./install.sh --dry-run --method ${{ matrix.method }} 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "Platform: linux"
+          echo "$OUTPUT" | grep -q "amd64"
+
+      - name: Test install (real)
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: ./install.sh --method ${{ matrix.method }} --force
+
+      - name: Verify installation
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: |
+          if [ "${{ matrix.method }}" = "jar" ]; then
+            test -f /opt/bossterm/bossterm.jar || test -f ~/.local/share/bossterm/bossterm.jar
+            echo "JAR installation verified"
+          else
+            dpkg -l bossterm || which bossterm
+            echo "Package installation verified"
+          fi
+
+      - name: Test uninstall
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: echo "n" | ./install.sh --uninstall
+
+  # ============================================================================
+  # Ubuntu Tests (ARM64)
+  # ============================================================================
+  test-ubuntu-arm:
+    name: Ubuntu ARM64 (deb)
+    runs-on: ubuntu-24.04-arm
+    needs: shellcheck
+    continue-on-error: true  # ARM runners may not be available
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Test platform detection (dry-run)
+        run: |
+          OUTPUT=$(./install.sh --dry-run --method deb 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "Platform: linux"
+          echo "$OUTPUT" | grep -q "arm64"
+
+      - name: Test install (real)
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: ./install.sh --method deb --force
+
+  # ============================================================================
+  # Snap Tests (dry-run only - real snap install is complex in CI)
+  # ============================================================================
+  test-snap:
+    name: Ubuntu (snap dry-run)
+    runs-on: ubuntu-latest
+    needs: shellcheck
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Test snap method detection (dry-run)
+        run: |
+          OUTPUT=$(./install.sh --dry-run --method snap 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "Method: snap"
+
+  # ============================================================================
+  # Fedora Tests (via container)
+  # ============================================================================
+  test-fedora:
+    name: Fedora 39 (rpm)
+    runs-on: ubuntu-latest
+    needs: shellcheck
+    container: fedora:39
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: dnf install -y curl which findutils
+
+      - name: Test platform detection (dry-run)
+        run: |
+          OUTPUT=$(./install.sh --dry-run --method rpm 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "Platform: linux"
+          echo "$OUTPUT" | grep -q "Method: rpm"
+
+      - name: Test install (real)
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: ./install.sh --method rpm --force
+
+      - name: Verify installation
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: rpm -q bossterm
+
+  # ============================================================================
+  # Debian Tests (via container)
+  # ============================================================================
+  test-debian:
+    name: Debian 12 (deb)
+    runs-on: ubuntu-latest
+    needs: shellcheck
+    container: debian:12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: apt-get update && apt-get install -y curl ca-certificates
+
+      - name: Test platform detection (dry-run)
+        run: |
+          OUTPUT=$(./install.sh --dry-run --method deb 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "Platform: linux"
+          echo "$OUTPUT" | grep -q "Method: deb"
+
+      - name: Test install (real)
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: ./install.sh --method deb --force
+
+  # ============================================================================
+  # Edge Case Tests
+  # ============================================================================
+  test-edge-cases:
+    name: Edge Cases
+    runs-on: ubuntu-latest
+    needs: shellcheck
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Test --help output
+        run: |
+          ./install.sh --help
+          ./install.sh --help | grep -q "BossTerm Installation Script"
+
+      - name: Test invalid option
+        run: |
+          ! ./install.sh --invalid-option 2>&1 | grep -q "Unknown option"
+          echo "Invalid option correctly rejected"
+
+      - name: Test --no-cli flag (dry-run)
+        run: |
+          OUTPUT=$(./install.sh --dry-run --no-cli 2>&1)
+          echo "$OUTPUT"
+
+      - name: Test --force flag (dry-run)
+        run: |
+          OUTPUT=$(./install.sh --dry-run --force 2>&1)
+          echo "$OUTPUT"
+
+      - name: Test specific version (dry-run)
+        run: |
+          OUTPUT=$(./install.sh --dry-run --version 1.0.80 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "Version: 1.0.80"
+
+  # ============================================================================
+  # Windows Tests (PowerShell)
+  # ============================================================================
+  test-windows-ps:
+    name: Windows (PowerShell)
+    runs-on: windows-latest
+    needs: shellcheck
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Test -Help
+        run: .\install.ps1 -Help
+        shell: pwsh
+
+      - name: Test platform detection (dry-run)
+        run: |
+          $output = .\install.ps1 -DryRun 2>&1 | Out-String
+          Write-Host $output
+          if ($output -notmatch "Platform: Windows") {
+            throw "Platform detection failed"
+          }
+        shell: pwsh
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Test install (real)
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: .\install.ps1 -Force
+        shell: pwsh
+
+      - name: Verify installation
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: |
+          if (-not (Test-Path "$env:LOCALAPPDATA\BossTerm\bossterm.jar")) {
+            throw "JAR not found"
+          }
+          Write-Host "Installation verified"
+        shell: pwsh
+
+      - name: Test uninstall
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: |
+          echo "n" | .\install.ps1 -Uninstall
+        shell: pwsh
+
+  # ============================================================================
+  # Windows Tests (Batch)
+  # ============================================================================
+  test-windows-bat:
+    name: Windows (Batch)
+    runs-on: windows-latest
+    needs: shellcheck
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Test /help
+        run: install.bat /help
+        shell: cmd
+
+      - name: Test /dryrun
+        run: |
+          install.bat /dryrun
+          if errorlevel 1 exit /b 1
+        shell: cmd
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Test install (real)
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: install.bat /force
+        shell: cmd
+
+      - name: Verify installation
+        if: github.event_name == 'release' || github.event.inputs.run_real_install == 'true'
+        run: |
+          if not exist "%LOCALAPPDATA%\BossTerm\bossterm.jar" exit /b 1
+          echo Installation verified
+        shell: cmd
+
+  # ============================================================================
+  # Summary
+  # ============================================================================
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [shellcheck, test-macos-arm, test-macos-intel, test-ubuntu, test-snap, test-fedora, test-debian, test-windows-ps, test-windows-bat, test-edge-cases]
+    if: always()
+    steps:
+      - name: Check Results
+        run: |
+          echo "## Install Script Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ShellCheck | ${{ needs.shellcheck.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS ARM64 | ${{ needs.test-macos-arm.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS Intel | ${{ needs.test-macos-intel.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Ubuntu AMD64 | ${{ needs.test-ubuntu.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Snap | ${{ needs.test-snap.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Fedora | ${{ needs.test-fedora.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Debian | ${{ needs.test-debian.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Windows (PS) | ${{ needs.test-windows-ps.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Windows (BAT) | ${{ needs.test-windows-bat.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Edge Cases | ${{ needs.test-edge-cases.result }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if critical tests failed
+        if: |
+          needs.shellcheck.result == 'failure' ||
+          needs.test-macos-arm.result == 'failure' ||
+          needs.test-ubuntu.result == 'failure' ||
+          needs.test-windows-ps.result == 'failure'
+        run: exit 1

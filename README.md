@@ -61,6 +61,30 @@ Alacritty  ███████████████████████
 
 ## Installation
 
+### Quick Install (Recommended)
+
+Install BossTerm with a single command:
+
+```bash
+curl -fsSL https://risaboss.com/install.sh | bash
+```
+
+Or install a specific version:
+
+```bash
+curl -fsSL https://risaboss.com/install.sh | bash -s -- --version 1.0.5
+```
+
+The installer automatically detects your platform and uses the best method (Homebrew on macOS, Deb/RPM on Linux).
+
+To uninstall:
+
+```bash
+curl -fsSL https://risaboss.com/install.sh | bash -s -- --uninstall
+```
+
+---
+
 ### macOS (Homebrew)
 
 ```bash
@@ -98,6 +122,43 @@ Or download the `.snap` file from [GitHub Releases](https://github.com/kshivang/
 ```bash
 sudo snap install bossterm_*.snap --classic --dangerous
 ```
+
+### Windows (PowerShell)
+
+```powershell
+# Install latest version
+iwr -useb https://risaboss.com/install.ps1 | iex
+
+# Install specific version
+& ([scriptblock]::Create((iwr -useb https://risaboss.com/install.ps1))) -Version 1.0.5
+
+# Uninstall
+& ([scriptblock]::Create((iwr -useb https://risaboss.com/install.ps1))) -Uninstall
+```
+
+Or run from the repository:
+
+```powershell
+.\install.ps1
+.\install.ps1 -Version 1.0.5
+.\install.ps1 -Uninstall
+```
+
+### Windows (Batch - Legacy)
+
+For systems without PowerShell or older Windows versions:
+
+```cmd
+:: Download and run
+curl -fsSL https://risaboss.com/install.bat -o install.bat && install.bat
+
+:: Or from repository
+install.bat
+install.bat /version:1.0.5
+install.bat /uninstall
+```
+
+> **Note:** Windows installation requires Java 17+. The installer will attempt to install Java via winget or Chocolatey if not found.
 
 ### JAR (Cross-platform)
 
