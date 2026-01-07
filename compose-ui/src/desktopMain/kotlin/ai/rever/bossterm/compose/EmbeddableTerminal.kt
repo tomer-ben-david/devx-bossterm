@@ -388,8 +388,9 @@ fun EmbeddableTerminal(
                     val freshStatus = aiState.detector.detectAll()
                     detectionResultsHolder.set(freshStatus)
                 }
-                // Refresh VCS status
-                vcsMenuProvider.refreshStatus()
+                // Refresh VCS status with current working directory
+                val cwd = session.workingDirectory?.value
+                vcsMenuProvider.refreshStatus(cwd)
                 vcsStatusHolder.set(vcsMenuProvider.getStatus())
             },
             onLinkClick = onLinkClick,

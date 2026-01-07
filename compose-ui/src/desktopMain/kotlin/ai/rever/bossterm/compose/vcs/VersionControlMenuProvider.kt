@@ -26,11 +26,21 @@ class VersionControlMenuProvider {
     private var ghInstalled: Boolean? = null
 
     /**
+     * Whether the current working directory is inside a git repository.
+     */
+    private var isGitRepo: Boolean = false
+
+    /**
      * Cached list of git branches (local and remote tracking).
      * Updated on each context menu open.
      */
     private var gitBranches: List<String> = emptyList()
     private var currentBranch: String? = null
+
+    /**
+     * Current working directory for git operations.
+     */
+    private var workingDirectory: String? = null
 
     /**
      * Detect if a command is installed by checking `which`.
@@ -49,24 +59,57 @@ class VersionControlMenuProvider {
 
     /**
      * Refresh installation status for git and gh, and fetch git branches.
+     *
+     * @param cwd Current working directory for git operations
      */
-    suspend fun refreshStatus() = withContext(Dispatchers.IO) {
+    suspend fun refreshStatus(cwd: String? = null) = withContext(Dispatchers.IO) {
+        workingDirectory = cwd
         gitInstalled = isCommandInstalled("git")
         ghInstalled = isCommandInstalled("gh")
 
-        // Fetch git branches if git is installed
-        if (gitInstalled == true) {
-            fetchGitBranches()
+        // Check if current directory is a git repo and fetch branches
+        if (gitInstalled == true && cwd != null) {
+            isGitRepo = checkIsGitRepo(cwd)
+            if (isGitRepo) {
+                fetchGitBranches(cwd)
+            } else {
+                gitBranches = emptyList()
+                currentBranch = null
+            }
+        } else {
+            isGitRepo = false
+            gitBranches = emptyList()
+            currentBranch = null
+        }
+    }
+
+    /**
+     * Check if a directory is inside a git repository.
+     */
+    private fun checkIsGitRepo(cwd: String): Boolean {
+        return try {
+            val process = ProcessBuilder("git", "rev-parse", "--git-dir")
+                .directory(java.io.File(cwd))
+                .redirectErrorStream(true)
+                .start()
+            process.waitFor() == 0
+        } catch (e: Exception) {
+            false
         }
     }
 
     /**
      * Fetch local git branches and current branch.
+     *
+     * @param cwd Working directory to run git commands in
      */
-    private fun fetchGitBranches() {
+    private fun fetchGitBranches(cwd: String) {
         try {
+            val dir = java.io.File(cwd)
+
             // Get current branch
             val headProcess = ProcessBuilder("git", "rev-parse", "--abbrev-ref", "HEAD")
+                .directory(dir)
                 .redirectErrorStream(true)
                 .start()
             currentBranch = headProcess.inputStream.bufferedReader().readText().trim()
@@ -74,6 +117,7 @@ class VersionControlMenuProvider {
 
             // Get all local branches
             val branchProcess = ProcessBuilder("git", "branch", "--format=%(refname:short)")
+                .directory(dir)
                 .redirectErrorStream(true)
                 .start()
             val output = branchProcess.inputStream.bufferedReader().readText()
@@ -138,6 +182,7 @@ class VersionControlMenuProvider {
      * Build Git submenu with common commands or install option.
      */
     private fun buildGitMenu(isInstalled: Boolean, terminalWriter: (String) -> Unit): ContextMenuElement {
+        // Git not installed - show install option
         if (!isInstalled) {
             return ContextMenuSubmenu(
                 id = "git_submenu",
@@ -154,6 +199,27 @@ class VersionControlMenuProvider {
             )
         }
 
+        // Not in a git repository - show only git init
+        if (!isGitRepo) {
+            return ContextMenuSubmenu(
+                id = "git_submenu",
+                label = "Git",
+                items = listOf(
+                    ContextMenuItem(
+                        id = "git_init",
+                        label = "git init",
+                        action = { terminalWriter("git init\n") }
+                    ),
+                    ContextMenuItem(
+                        id = "git_clone",
+                        label = "git clone ...",
+                        action = { terminalWriter("git clone ") }
+                    )
+                )
+            )
+        }
+
+        // In a git repository - show full menu
         val gitCommands = listOf(
             ContextMenuSection(id = "git_status_section", label = "Status"),
             ContextMenuItem(
