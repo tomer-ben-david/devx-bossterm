@@ -14,14 +14,24 @@ object GitUtils {
      */
     fun isGitRepo(cwd: String?): Boolean {
         if (cwd == null) return false
+        var process: Process? = null
         return try {
-            val process = ProcessBuilder("git", "-C", cwd, "rev-parse", "--git-dir")
+            process = ProcessBuilder("git", "-C", cwd, "rev-parse", "--git-dir")
                 .redirectErrorStream(true)
                 .start()
             val completed = process.waitFor(2, TimeUnit.SECONDS)
-            completed && process.exitValue() == 0
+            if (!completed) {
+                process.destroyForcibly()
+                false
+            } else {
+                process.exitValue() == 0
+            }
         } catch (e: Exception) {
             false
+        } finally {
+            process?.inputStream?.close()
+            process?.errorStream?.close()
+            process?.outputStream?.close()
         }
     }
 
@@ -32,15 +42,25 @@ object GitUtils {
      */
     fun isGhRepoConfigured(cwd: String?): Boolean {
         if (cwd == null) return false
+        var process: Process? = null
         return try {
-            val process = ProcessBuilder("git", "-C", cwd, "config", "--get", "remote.origin.gh-resolved")
+            process = ProcessBuilder("git", "-C", cwd, "config", "--get", "remote.origin.gh-resolved")
                 .redirectErrorStream(true)
                 .start()
-            val output = process.inputStream.bufferedReader().readText().trim()
+            val output = process.inputStream.bufferedReader().use { it.readText().trim() }
             val completed = process.waitFor(2, TimeUnit.SECONDS)
-            completed && process.exitValue() == 0 && output.isNotEmpty()
+            if (!completed) {
+                process.destroyForcibly()
+                false
+            } else {
+                process.exitValue() == 0 && output.isNotEmpty()
+            }
         } catch (e: Exception) {
             false
+        } finally {
+            process?.inputStream?.close()
+            process?.errorStream?.close()
+            process?.outputStream?.close()
         }
     }
 
@@ -49,17 +69,25 @@ object GitUtils {
      */
     fun getCurrentBranch(cwd: String?): String? {
         if (cwd == null) return null
+        var process: Process? = null
         return try {
-            val process = ProcessBuilder("git", "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD")
+            process = ProcessBuilder("git", "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD")
                 .redirectErrorStream(true)
                 .start()
-            val output = process.inputStream.bufferedReader().readText().trim()
+            val output = process.inputStream.bufferedReader().use { it.readText().trim() }
             val completed = process.waitFor(2, TimeUnit.SECONDS)
-            if (completed && process.exitValue() == 0 && output.isNotEmpty() && output != "HEAD") {
+            if (!completed) {
+                process.destroyForcibly()
+                null
+            } else if (process.exitValue() == 0 && output.isNotEmpty() && output != "HEAD") {
                 output
             } else null
         } catch (e: Exception) {
             null
+        } finally {
+            process?.inputStream?.close()
+            process?.errorStream?.close()
+            process?.outputStream?.close()
         }
     }
 
@@ -68,19 +96,27 @@ object GitUtils {
      */
     fun getLocalBranches(cwd: String?): List<String> {
         if (cwd == null) return emptyList()
+        var process: Process? = null
         return try {
-            val process = ProcessBuilder("git", "-C", cwd, "branch", "--format=%(refname:short)")
+            process = ProcessBuilder("git", "-C", cwd, "branch", "--format=%(refname:short)")
                 .redirectErrorStream(true)
                 .start()
-            val output = process.inputStream.bufferedReader().readText()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
             val completed = process.waitFor(2, TimeUnit.SECONDS)
-            if (completed && process.exitValue() == 0) {
+            if (!completed) {
+                process.destroyForcibly()
+                emptyList()
+            } else if (process.exitValue() == 0) {
                 output.lines()
                     .map { it.trim() }
                     .filter { it.isNotEmpty() }
             } else emptyList()
         } catch (e: Exception) {
             emptyList()
+        } finally {
+            process?.inputStream?.close()
+            process?.errorStream?.close()
+            process?.outputStream?.close()
         }
     }
 

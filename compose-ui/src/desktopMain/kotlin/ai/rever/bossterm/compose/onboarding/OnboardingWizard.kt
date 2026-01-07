@@ -447,14 +447,18 @@ suspend fun detectInstalledTools(): InstalledTools = withContext(Dispatchers.IO)
  * Uses a login shell to ensure user's PATH is fully loaded (including npm, nvm, etc.)
  */
 private fun isCommandInstalled(command: String): Boolean {
+    var process: Process? = null
     return try {
         // Use login shell to source user's profile and get full PATH
         val shell = System.getenv("SHELL") ?: "/bin/bash"
-        val process = ProcessBuilder(shell, "-l", "-c", "command -v $command")
+        process = ProcessBuilder(shell, "-l", "-c", "command -v $command")
             .redirectErrorStream(true)
             .start()
         val completed = process.waitFor(3, TimeUnit.SECONDS)
-        if (completed && process.exitValue() == 0) {
+        if (!completed) {
+            process.destroyForcibly()
+            // Fall through to path check
+        } else if (process.exitValue() == 0) {
             return true
         }
 
@@ -485,20 +489,35 @@ private fun isCommandInstalled(command: String): Boolean {
         }
     } catch (e: Exception) {
         false
+    } finally {
+        process?.inputStream?.close()
+        process?.errorStream?.close()
+        process?.outputStream?.close()
     }
 }
 
 /**
  * Build the combined installation command for all selected tools.
  * Groups sudo commands together to minimize password prompts.
+ *
+ * @return The combined installation command, or an error message if building fails
  */
 fun buildInstallCommand(selections: OnboardingSelections, installed: InstalledTools): String {
+    return try {
+        buildInstallCommandInternal(selections, installed)
+    } catch (e: Exception) {
+        "echo 'Error building installation command: ${e.message?.replace("'", "\\'")}' && exit 1"
+    }
+}
+
+private fun buildInstallCommandInternal(selections: OnboardingSelections, installed: InstalledTools): String {
     val sudoCommands = mutableListOf<String>()
     val userCommands = mutableListOf<String>()
     val postInstallCommands = mutableListOf<String>()
 
-    val isMac = System.getProperty("os.name").lowercase().contains("mac")
-    val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+    val osName = System.getProperty("os.name") ?: "unknown"
+    val isMac = osName.lowercase().contains("mac")
+    val isWindows = osName.lowercase().contains("windows")
 
     // Helper to get Linux install command
     fun getLinuxInstall(pkg: String): String {
