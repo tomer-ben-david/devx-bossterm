@@ -331,7 +331,7 @@ class ShellCustomizationMenuProvider {
                     id = "starship_uninstall",
                     label = "Uninstall",
                     action = {
-                        terminalWriter("sh -c 'rm -v \"\$(which starship)\"' && echo '✓ Starship uninstalled. Remove init line from your shell config.'\n")
+                        terminalWriter("sudo rm -v \"\$(which starship)\" && echo '✓ Starship uninstalled. Remove init line from your shell config.'\n")
                     }
                 )
             )
