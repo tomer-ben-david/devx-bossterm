@@ -880,8 +880,6 @@ fun TabbedTerminal(
 
                     // Add AI assistant menu items
                     if (settings.aiAssistantsEnabled) {
-                        // Get working directory from focused session for launching AI assistants
-                        val workingDir = splitState.getFocusedSession()?.workingDirectory?.value
                         val terminalWriter: (String) -> Unit = { text ->
                             splitState.getFocusedSession()?.writeUserInput(text)
                         }
@@ -890,7 +888,6 @@ fun TabbedTerminal(
                             onInstallRequest = { assistant, command, npmCommand ->
                                 installDialogState = AIInstallDialogParams(assistant, command, npmCommand, terminalWriter)
                             },
-                            workingDirectory = workingDir,
                             configs = settings.aiAssistantConfigs,
                             statusOverride = detectionResultsHolder.get()
                         )

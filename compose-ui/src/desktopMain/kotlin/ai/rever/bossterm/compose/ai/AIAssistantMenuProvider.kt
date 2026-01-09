@@ -29,7 +29,6 @@ class AIAssistantMenuProvider(
      *
      * @param terminalWriter Function to write commands to the terminal (for launching)
      * @param onInstallRequest Callback to trigger installation dialog (assistant, installCommand, npmCommand?)
-     * @param workingDirectory Current working directory for launching assistants
      * @param configs Per-assistant configuration from settings
      * @param statusOverride Optional pre-computed installation status (bypasses StateFlow for immediate updates)
      * @return List of context menu elements for the AI Assistants section
@@ -37,7 +36,6 @@ class AIAssistantMenuProvider(
     fun getMenuItems(
         terminalWriter: (String) -> Unit,
         onInstallRequest: (AIAssistantDefinition, String, String?) -> Unit,
-        workingDirectory: String? = null,
         configs: Map<String, AIAssistantConfigData> = emptyMap(),
         statusOverride: Map<String, Boolean>? = null
     ): List<ContextMenuElement> {
@@ -64,7 +62,7 @@ class AIAssistantMenuProvider(
                         id = "ai_launch_${assistant.id}",
                         label = label,
                         action = {
-                            terminalWriter(launcher.getLaunchCommand(assistant, config, workingDirectory))
+                            terminalWriter(launcher.getLaunchCommand(assistant, config))
                         }
                     )
                 )
