@@ -360,15 +360,12 @@ fun EmbeddableTerminal(
 
                 // Add AI assistant menu items
                 if (resolvedSettings.aiAssistantsEnabled) {
-                    // Get working directory from session for launching AI assistants
-                    val workingDir = session.workingDirectory?.value
                     val terminalWriter: (String) -> Unit = { text -> session.writeUserInput(text) }
                     val aiItems = aiState.menuProvider.getMenuItems(
                         terminalWriter = terminalWriter,
                         onInstallRequest = { assistant, command, npmCommand ->
                             installDialogState = AIInstallDialogParams(assistant, command, npmCommand, terminalWriter)
                         },
-                        workingDirectory = workingDir,
                         configs = resolvedSettings.aiAssistantConfigs,
                         statusOverride = detectionResultsHolder.get()
                     )

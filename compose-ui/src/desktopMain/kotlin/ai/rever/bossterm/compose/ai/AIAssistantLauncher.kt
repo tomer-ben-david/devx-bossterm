@@ -14,19 +14,12 @@ class AIAssistantLauncher {
      *
      * @param assistant The assistant definition
      * @param config The assistant's configuration (for YOLO mode settings)
-     * @param workingDirectory Optional working directory to cd into first
      */
     fun getLaunchCommand(
         assistant: AIAssistantDefinition,
-        config: AIAssistantConfigData? = null,
-        workingDirectory: String? = null
+        config: AIAssistantConfigData? = null
     ): String {
-        val command = buildLaunchCommand(assistant, config)
-        return if (workingDirectory != null) {
-            "cd ${escapeShellArg(workingDirectory)} && $command\n"
-        } else {
-            "$command\n"
-        }
+        return "${buildLaunchCommand(assistant, config)}\n"
     }
 
     /**
@@ -152,10 +145,6 @@ class AIAssistantLauncher {
      */
     fun openWebsite(assistant: AIAssistantDefinition): Boolean {
         return UrlOpener.open(assistant.websiteUrl)
-    }
-
-    private fun escapeShellArg(arg: String): String {
-        return "'${arg.replace("'", "'\\''")}'"
     }
 
     private fun isWindows(): Boolean =
