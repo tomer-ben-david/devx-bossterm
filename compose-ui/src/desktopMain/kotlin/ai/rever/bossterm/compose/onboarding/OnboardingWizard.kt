@@ -64,11 +64,17 @@ enum class ShellChoice(
     val id: String,
     val displayName: String,
     val description: String,
-    val command: String
+    val command: String,
+    val isWindows: Boolean = false
 ) {
+    // Unix shells
     ZSH("zsh", "Zsh", "Modern shell with powerful features, tab completion, and plugin support", "zsh"),
     BASH("bash", "Bash", "Classic Unix shell, widely compatible across systems", "bash"),
     FISH("fish", "Fish", "User-friendly shell with autosuggestions and syntax highlighting", "fish"),
+    // Windows shells
+    POWERSHELL("powershell", "PowerShell", "Modern Windows shell with scripting and automation", "powershell.exe", true),
+    CMD("cmd", "Command Prompt", "Classic Windows command line interpreter", "cmd.exe", true),
+    // Keep current
     KEEP_CURRENT("keep", "Keep Current", "Use your current default shell", "")
 }
 
@@ -79,13 +85,19 @@ enum class ShellCustomizationChoice(
     val id: String,
     val displayName: String,
     val description: String,
-    val requiresZsh: Boolean
+    val requiresZsh: Boolean = false,
+    val isWindowsOnly: Boolean = false
 ) {
-    STARSHIP("starship", "Starship", "Fast, minimal, customizable prompt for any shell", false),
-    OH_MY_ZSH("oh-my-zsh", "Oh My Zsh", "Framework with 300+ plugins and 150+ themes", true),
-    PREZTO("prezto", "Prezto", "Lightweight Zsh configuration framework", true),
-    NONE("none", "None", "Keep the default shell prompt", false),
-    KEEP_EXISTING("keep", "Keep Existing", "You already have customization installed", false)
+    // Cross-platform
+    STARSHIP("starship", "Starship", "Fast, minimal, customizable prompt for any shell", false, false),
+    // Unix only (requires Zsh)
+    OH_MY_ZSH("oh-my-zsh", "Oh My Zsh", "Framework with 300+ plugins and 150+ themes", true, false),
+    PREZTO("prezto", "Prezto", "Lightweight Zsh configuration framework", true, false),
+    // Windows only
+    OH_MY_POSH("oh-my-posh", "Oh My Posh", "Prompt theme engine for PowerShell and CMD", false, true),
+    // Common
+    NONE("none", "None", "Keep the default shell prompt", false, false),
+    KEEP_EXISTING("keep", "Keep Existing", "You already have customization installed", false, false)
 }
 
 /**
@@ -103,21 +115,29 @@ data class OnboardingSelections(
  * Detected installed tools.
  */
 data class InstalledTools(
+    // Unix shells
     val zsh: Boolean = false,
     val bash: Boolean = false,
     val fish: Boolean = false,
+    // Windows shells
+    val powershell: Boolean = false,
+    val cmd: Boolean = false,
+    // Customization tools
     val starship: Boolean = false,
     val ohMyZsh: Boolean = false,
     val prezto: Boolean = false,
+    val ohMyPosh: Boolean = false,
+    // Version control
     val git: Boolean = false,
     val gh: Boolean = false,
+    // AI assistants
     val claudeCode: Boolean = false,
     val gemini: Boolean = false,
     val codex: Boolean = false,
     val opencode: Boolean = false
 ) {
     val hasAnyShellCustomization: Boolean
-        get() = starship || ohMyZsh || prezto
+        get() = starship || ohMyZsh || prezto || ohMyPosh
 }
 
 /**
@@ -395,18 +415,21 @@ private fun hasAnySelection(selections: OnboardingSelections, installed: Install
             ShellChoice.ZSH -> installed.zsh
             ShellChoice.BASH -> installed.bash
             ShellChoice.FISH -> installed.fish
+            ShellChoice.POWERSHELL -> installed.powershell
+            ShellChoice.CMD -> installed.cmd
             ShellChoice.KEEP_CURRENT -> true
         }
         if (!shellInstalled) return true
     }
     // Check if NONE is selected and there are existing customizations to uninstall
     if (selections.shellCustomization == ShellCustomizationChoice.NONE) {
-        if (installed.starship || installed.ohMyZsh || installed.prezto) return true
+        if (installed.starship || installed.ohMyZsh || installed.prezto || installed.ohMyPosh) return true
     } else if (selections.shellCustomization != ShellCustomizationChoice.KEEP_EXISTING) {
         val customInstalled = when (selections.shellCustomization) {
             ShellCustomizationChoice.STARSHIP -> installed.starship
             ShellCustomizationChoice.OH_MY_ZSH -> installed.ohMyZsh
             ShellCustomizationChoice.PREZTO -> installed.prezto
+            ShellCustomizationChoice.OH_MY_POSH -> installed.ohMyPosh
             else -> true
         }
         if (!customInstalled) return true
@@ -432,15 +455,25 @@ private fun hasAnySelection(selections: OnboardingSelections, installed: Install
  * Detect installed tools.
  */
 suspend fun detectInstalledTools(): InstalledTools = withContext(Dispatchers.IO) {
+    val isWindows = ShellCustomizationUtils.isWindows()
+
     InstalledTools(
-        zsh = isCommandInstalled("zsh"),
-        bash = isCommandInstalled("bash"),
-        fish = isCommandInstalled("fish"),
+        // Unix shells
+        zsh = if (!isWindows) isCommandInstalled("zsh") else false,
+        bash = if (!isWindows) isCommandInstalled("bash") else false,
+        fish = if (!isWindows) isCommandInstalled("fish") else false,
+        // Windows shells (always available on Windows)
+        powershell = if (isWindows) isCommandInstalled("powershell") else false,
+        cmd = isWindows, // cmd is always available on Windows
+        // Customization tools
         starship = ShellCustomizationUtils.isStarshipInstalled() || isCommandInstalled("starship"),
-        ohMyZsh = ShellCustomizationUtils.isOhMyZshInstalled(),
-        prezto = ShellCustomizationUtils.isPreztoInstalled(),
+        ohMyZsh = if (!isWindows) ShellCustomizationUtils.isOhMyZshInstalled() else false,
+        prezto = if (!isWindows) ShellCustomizationUtils.isPreztoInstalled() else false,
+        ohMyPosh = if (isWindows) isCommandInstalled("oh-my-posh") else false,
+        // Version control
         git = isCommandInstalled("git"),
         gh = isCommandInstalled("gh"),
+        // AI assistants
         claudeCode = isCommandInstalled("claude"),
         gemini = isCommandInstalled("gemini"),
         codex = isCommandInstalled("codex"),
@@ -450,47 +483,65 @@ suspend fun detectInstalledTools(): InstalledTools = withContext(Dispatchers.IO)
 
 /**
  * Check if a command is installed.
- * Uses a login shell to ensure user's PATH is fully loaded (including npm, nvm, etc.)
+ * Uses platform-appropriate detection:
+ * - Windows: Uses 'where' command
+ * - Unix/macOS: Uses login shell with 'command -v'
  */
 private fun isCommandInstalled(command: String): Boolean {
+    val isWindows = ShellCustomizationUtils.isWindows()
     var process: Process? = null
+
     return try {
-        // Use login shell to source user's profile and get full PATH
-        val shell = System.getenv("SHELL") ?: "/bin/bash"
-        process = ProcessBuilder(shell, "-l", "-c", "command -v $command")
-            .redirectErrorStream(true)
-            .start()
-        val completed = process.waitFor(3, TimeUnit.SECONDS)
-        if (!completed) {
-            process.destroyForcibly()
-            // Fall through to path check
-        } else if (process.exitValue() == 0) {
-            return true
-        }
-
-        // Fallback: check common installation paths directly
-        val home = System.getProperty("user.home") ?: return false
-        val commonPaths = listOf(
-            "$home/.local/bin/$command",
-            "$home/.npm-global/bin/$command",
-            "$home/.nvm/versions/node/*/bin/$command",
-            "$home/.$command/bin/$command",  // e.g., ~/.opencode/bin/opencode
-            "$home/.cargo/bin/$command",
-            "$home/go/bin/$command",
-            "/usr/local/bin/$command",
-            "/opt/homebrew/bin/$command"
-        )
-
-        commonPaths.any { path ->
-            if (path.contains("*")) {
-                // Handle glob patterns (e.g., nvm paths)
-                val basePath = path.substringBefore("*")
-                val suffix = path.substringAfter("*")
-                File(basePath).takeIf { it.isDirectory }?.listFiles()?.any { dir ->
-                    File(dir.absolutePath + suffix).exists()
-                } ?: false
+        if (isWindows) {
+            // Windows: Use 'where' command
+            process = ProcessBuilder("where", command)
+                .redirectErrorStream(true)
+                .start()
+            val completed = process.waitFor(3, TimeUnit.SECONDS)
+            if (!completed) {
+                process.destroyForcibly()
+                false
             } else {
-                File(path).exists()
+                process.exitValue() == 0
+            }
+        } else {
+            // Unix/macOS: Use login shell to source user's profile and get full PATH
+            val shell = System.getenv("SHELL") ?: "/bin/bash"
+            process = ProcessBuilder(shell, "-l", "-c", "command -v $command")
+                .redirectErrorStream(true)
+                .start()
+            val completed = process.waitFor(3, TimeUnit.SECONDS)
+            if (!completed) {
+                process.destroyForcibly()
+                // Fall through to path check
+            } else if (process.exitValue() == 0) {
+                return true
+            }
+
+            // Fallback: check common installation paths directly
+            val home = System.getProperty("user.home") ?: return false
+            val commonPaths = listOf(
+                "$home/.local/bin/$command",
+                "$home/.npm-global/bin/$command",
+                "$home/.nvm/versions/node/*/bin/$command",
+                "$home/.$command/bin/$command",  // e.g., ~/.opencode/bin/opencode
+                "$home/.cargo/bin/$command",
+                "$home/go/bin/$command",
+                "/usr/local/bin/$command",
+                "/opt/homebrew/bin/$command"
+            )
+
+            commonPaths.any { path ->
+                if (path.contains("*")) {
+                    // Handle glob patterns (e.g., nvm paths)
+                    val basePath = path.substringBefore("*")
+                    val suffix = path.substringAfter("*")
+                    File(basePath).takeIf { it.isDirectory }?.listFiles()?.any { dir ->
+                        File(dir.absolutePath + suffix).exists()
+                    } ?: false
+                } else {
+                    File(path).exists()
+                }
             }
         }
     } catch (e: Exception) {
@@ -599,24 +650,26 @@ private fun buildInstallCommandInternal(selections: OnboardingSelections, instal
             ShellChoice.ZSH -> installed.zsh
             ShellChoice.BASH -> installed.bash
             ShellChoice.FISH -> installed.fish
+            ShellChoice.POWERSHELL -> installed.powershell
+            ShellChoice.CMD -> installed.cmd
             ShellChoice.KEEP_CURRENT -> true
         }
         val shellCmd = selections.shell.command
-        if (!shellInstalled) {
+        if (!shellInstalled && !isWindows) {
+            // Only install shells on Unix (Windows shells are built-in)
             when {
                 isMac -> sudoCommands.add("brew install $shellCmd")
-                isWindows -> userCommands.add("echo 'Please install $shellCmd manually on Windows'")
                 else -> sudoCommands.add(getLinuxInstall(shellCmd))
             }
         }
-        // Set selected shell as default using chsh (requires sudo for non-interactive use)
-        if (!isWindows) {
+        // Set selected shell as default using chsh (Unix only, not needed on Windows)
+        if (!isWindows && !shellInstalled) {
             sudoCommands.add("sudo chsh -s \$(which $shellCmd) \$USER && echo '✓ Default shell changed to $shellCmd'")
         }
     }
 
     // Shell customization (with conflict removal)
-    // Use shared uninstall commands from ShellCustomizationUtils
+    // Use shared uninstall commands from ShellCustomizationUtils (Unix only)
     val uninstallOhMyZsh = ShellCustomizationUtils.getOhMyZshUninstallCommand()
     val uninstallPrezto = ShellCustomizationUtils.getPreztoUninstallCommand()
     val uninstallStarship = ShellCustomizationUtils.getStarshipUninstallCommand()
@@ -624,47 +677,90 @@ private fun buildInstallCommandInternal(selections: OnboardingSelections, instal
     // Handle NONE option - uninstall all existing customizations
     if (selections.shellCustomization == ShellCustomizationChoice.NONE) {
         if (installed.starship) {
-            userCommands.add(uninstallStarship)
+            if (isWindows) {
+                userCommands.add("winget uninstall Starship.Starship --silent")
+            } else {
+                userCommands.add(uninstallStarship)
+            }
         }
-        if (installed.ohMyZsh) {
+        if (installed.ohMyZsh && !isWindows) {
             userCommands.add(uninstallOhMyZsh)
         }
-        if (installed.prezto) {
+        if (installed.prezto && !isWindows) {
             userCommands.add(uninstallPrezto)
+        }
+        if (installed.ohMyPosh && isWindows) {
+            userCommands.add("winget uninstall JanDeDobbeleer.OhMyPosh --silent")
         }
     } else if (selections.shellCustomization != ShellCustomizationChoice.KEEP_EXISTING) {
         val customInstalled = when (selections.shellCustomization) {
             ShellCustomizationChoice.STARSHIP -> installed.starship
             ShellCustomizationChoice.OH_MY_ZSH -> installed.ohMyZsh
             ShellCustomizationChoice.PREZTO -> installed.prezto
+            ShellCustomizationChoice.OH_MY_POSH -> installed.ohMyPosh
             else -> true
         }
 
         if (!customInstalled) {
             when (selections.shellCustomization) {
                 ShellCustomizationChoice.STARSHIP -> {
-                    // Uninstall Oh My Zsh and Prezto first (they conflict with Starship on Zsh)
-                    if (installed.ohMyZsh) {
-                        userCommands.add(uninstallOhMyZsh)
+                    if (isWindows) {
+                        // Windows: Install Starship via winget and configure PowerShell profile
+                        if (installed.ohMyPosh) {
+                            userCommands.add("winget uninstall JanDeDobbeleer.OhMyPosh --silent")
+                        }
+                        userCommands.add("winget install Starship.Starship --accept-source-agreements --accept-package-agreements")
+                        // Configure PowerShell profile
+                        postInstallCommands.add(
+                            "powershell -Command \"" +
+                            "\$profilePath = \\\"\$env:USERPROFILE\\\\Documents\\\\PowerShell\\\\Microsoft.PowerShell_profile.ps1\\\"; " +
+                            "if (!(Test-Path (Split-Path \\\$profilePath))) { New-Item -ItemType Directory -Path (Split-Path \\\$profilePath) -Force | Out-Null }; " +
+                            "if (!(Test-Path \\\$profilePath)) { New-Item -ItemType File -Path \\\$profilePath -Force | Out-Null }; " +
+                            "if (!(Select-String -Path \\\$profilePath -Pattern 'starship init' -Quiet -ErrorAction SilentlyContinue)) { " +
+                            "Add-Content -Path \\\$profilePath -Value 'Invoke-Expression (&starship init powershell)' }; " +
+                            "Write-Host 'Starship configured for PowerShell'\""
+                        )
+                    } else {
+                        // Unix: Uninstall Oh My Zsh and Prezto first (they conflict with Starship on Zsh)
+                        if (installed.ohMyZsh) {
+                            userCommands.add(uninstallOhMyZsh)
+                        }
+                        if (installed.prezto) {
+                            userCommands.add(uninstallPrezto)
+                        }
+                        // Starship install script + shell config
+                        userCommands.add("curl -sS https://starship.rs/install.sh | sh -s -- -y")
+                        postInstallCommands.add(
+                            "SHELL_NAME=\$(basename \"\$SHELL\") && " +
+                            "if [ \"\$SHELL_NAME\" = \"zsh\" ]; then " +
+                            "  grep -q 'starship init zsh' ~/.zshrc 2>/dev/null || echo 'eval \"\$(starship init zsh)\"' >> ~/.zshrc; " +
+                            "elif [ \"\$SHELL_NAME\" = \"bash\" ]; then " +
+                            "  grep -q 'starship init bash' ~/.bashrc 2>/dev/null || echo 'eval \"\$(starship init bash)\"' >> ~/.bashrc; " +
+                            "elif [ \"\$SHELL_NAME\" = \"fish\" ]; then " +
+                            "  mkdir -p ~/.config/fish && grep -q 'starship init fish' ~/.config/fish/config.fish 2>/dev/null || echo 'starship init fish | source' >> ~/.config/fish/config.fish; " +
+                            "fi && echo '✓ Starship configured'"
+                        )
                     }
-                    if (installed.prezto) {
-                        userCommands.add(uninstallPrezto)
+                }
+                ShellCustomizationChoice.OH_MY_POSH -> {
+                    // Windows only: Install Oh My Posh
+                    if (installed.starship) {
+                        userCommands.add("winget uninstall Starship.Starship --silent")
                     }
-                    // Starship install script + shell config
-                    userCommands.add("curl -sS https://starship.rs/install.sh | sh -s -- -y")
+                    userCommands.add("winget install JanDeDobbeleer.OhMyPosh --accept-source-agreements --accept-package-agreements")
+                    // Configure PowerShell profile
                     postInstallCommands.add(
-                        "SHELL_NAME=\$(basename \"\$SHELL\") && " +
-                        "if [ \"\$SHELL_NAME\" = \"zsh\" ]; then " +
-                        "  grep -q 'starship init zsh' ~/.zshrc 2>/dev/null || echo 'eval \"\$(starship init zsh)\"' >> ~/.zshrc; " +
-                        "elif [ \"\$SHELL_NAME\" = \"bash\" ]; then " +
-                        "  grep -q 'starship init bash' ~/.bashrc 2>/dev/null || echo 'eval \"\$(starship init bash)\"' >> ~/.bashrc; " +
-                        "elif [ \"\$SHELL_NAME\" = \"fish\" ]; then " +
-                        "  mkdir -p ~/.config/fish && grep -q 'starship init fish' ~/.config/fish/config.fish 2>/dev/null || echo 'starship init fish | source' >> ~/.config/fish/config.fish; " +
-                        "fi && echo '✓ Starship configured'"
+                        "powershell -Command \"" +
+                        "\$profilePath = \\\"\$env:USERPROFILE\\\\Documents\\\\PowerShell\\\\Microsoft.PowerShell_profile.ps1\\\"; " +
+                        "if (!(Test-Path (Split-Path \\\$profilePath))) { New-Item -ItemType Directory -Path (Split-Path \\\$profilePath) -Force | Out-Null }; " +
+                        "if (!(Test-Path \\\$profilePath)) { New-Item -ItemType File -Path \\\$profilePath -Force | Out-Null }; " +
+                        "if (!(Select-String -Path \\\$profilePath -Pattern 'oh-my-posh' -Quiet -ErrorAction SilentlyContinue)) { " +
+                        "Add-Content -Path \\\$profilePath -Value 'oh-my-posh init pwsh | Invoke-Expression' }; " +
+                        "Write-Host 'Oh My Posh configured for PowerShell'\""
                     )
                 }
                 ShellCustomizationChoice.OH_MY_ZSH -> {
-                    // Uninstall Prezto and Starship first
+                    // Unix only: Uninstall Prezto and Starship first
                     if (installed.prezto) {
                         userCommands.add(uninstallPrezto)
                     }
@@ -674,7 +770,7 @@ private fun buildInstallCommandInternal(selections: OnboardingSelections, instal
                     userCommands.add("sh -c \"\$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\" \"\" --unattended")
                 }
                 ShellCustomizationChoice.PREZTO -> {
-                    // Uninstall Oh My Zsh and Starship first
+                    // Unix only: Uninstall Oh My Zsh and Starship first
                     if (installed.ohMyZsh) {
                         userCommands.add(uninstallOhMyZsh)
                     }

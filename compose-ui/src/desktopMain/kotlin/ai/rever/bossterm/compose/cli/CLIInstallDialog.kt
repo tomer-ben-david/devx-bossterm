@@ -134,6 +134,10 @@ fun CLIInstallDialog(
                                         statusMessage = "Uninstalled successfully"
                                         isInstalled = false
                                     }
+                                    is CLIInstaller.InstallResult.SuccessWithWarning -> {
+                                        statusMessage = result.message
+                                        isInstalled = false
+                                    }
                                     is CLIInstaller.InstallResult.Cancelled -> {
                                         statusMessage = "Uninstall cancelled"
                                     }
@@ -170,6 +174,10 @@ fun CLIInstallDialog(
                                 when (result) {
                                     is CLIInstaller.InstallResult.Success -> {
                                         statusMessage = "Installed successfully! You can now use 'bossterm' command."
+                                        isInstalled = true
+                                    }
+                                    is CLIInstaller.InstallResult.SuccessWithWarning -> {
+                                        statusMessage = result.message
                                         isInstalled = true
                                     }
                                     is CLIInstaller.InstallResult.Cancelled -> {
