@@ -277,26 +277,8 @@ object WizardStepBuilders {
     ) {
         var isRunning by remember { mutableStateOf(true) }
         var detectedOtp by remember { mutableStateOf<String?>(null) }
+        var resetKey by remember { mutableStateOf(0) }
         val clipboardManager = LocalClipboardManager.current
-        val terminalState = rememberTabbedTerminalState(autoDispose = false)
-
-        // Poll for OTP pattern every 500ms
-        LaunchedEffect(isRunning) {
-            while (isRunning && detectedOtp == null) {
-                delay(500)
-                val matches = terminalState.findPatternRegex("[A-Z0-9]{4}-[A-Z0-9]{4}")
-                if (matches.isNotEmpty()) {
-                    detectedOtp = matches.first().text
-                }
-            }
-        }
-
-        // Cleanup terminal state
-        DisposableEffect(Unit) {
-            onDispose {
-                terminalState.dispose()
-            }
-        }
 
         Column(modifier = Modifier.fillMaxSize()) {
             Text(
@@ -371,37 +353,74 @@ object WizardStepBuilders {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Terminal
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
-            ) {
-                TabbedTerminal(
-                    state = terminalState,
-                    initialCommand = "gh auth login",
-                    onInitialCommandComplete = { success, exitCode ->
-                        isRunning = false
-                        if (success && exitCode == 0) {
-                            onComplete()
+            // Terminal (keyed to reset when needed)
+            key(resetKey) {
+                val terminalState = rememberTabbedTerminalState(autoDispose = false)
+
+                // Poll for OTP pattern every 500ms
+                LaunchedEffect(isRunning) {
+                    while (isRunning && detectedOtp == null) {
+                        delay(500)
+                        val matches = terminalState.findPatternRegex("[A-Z0-9]{4}-[A-Z0-9]{4}")
+                        if (matches.isNotEmpty()) {
+                            detectedOtp = matches.first().text
                         }
-                    },
-                    onExit = { },
-                    onContextMenuOpen = { },
-                    settingsOverride = TerminalSettingsOverride(fontSize = 12f),
-                    modifier = Modifier.fillMaxSize()
-                )
+                    }
+                }
+
+                // Cleanup terminal state
+                DisposableEffect(Unit) {
+                    onDispose {
+                        terminalState.dispose()
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
+                ) {
+                    TabbedTerminal(
+                        state = terminalState,
+                        initialCommand = "gh auth login",
+                        onInitialCommandComplete = { success, exitCode ->
+                            isRunning = false
+                            if (success && exitCode == 0) {
+                                onComplete()
+                            }
+                        },
+                        onExit = { },
+                        onContextMenuOpen = { },
+                        settingsOverride = TerminalSettingsOverride(fontSize = 12f),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Skip button
+            // Reset and Skip buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
+                OutlinedButton(
+                    onClick = {
+                        resetKey++
+                        detectedOtp = null
+                        isRunning = true
+                    },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        backgroundColor = Color.Transparent,
+                        contentColor = TextPrimary
+                    ),
+                    border = BorderStroke(1.dp, BorderColor)
+                ) {
+                    Text("Reset")
+                }
+                Spacer(Modifier.width(8.dp))
                 OutlinedButton(
                     onClick = onSkip,
                     colors = ButtonDefaults.outlinedButtonColors(
