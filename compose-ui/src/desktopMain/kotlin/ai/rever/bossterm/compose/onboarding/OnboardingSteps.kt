@@ -28,7 +28,14 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import ai.rever.bossterm.compose.EmbeddableTerminal
 import ai.rever.bossterm.compose.TabbedTerminal
+import ai.rever.bossterm.compose.rememberTabbedTerminalState
 import ai.rever.bossterm.compose.ai.AIAssistantIds
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import kotlinx.coroutines.delay
 import ai.rever.bossterm.compose.shell.ShellCustomizationUtils
 import ai.rever.bossterm.compose.ai.AIAssistants
 import ai.rever.bossterm.compose.settings.TerminalSettingsOverride
@@ -1161,6 +1168,29 @@ fun GhAuthStep(
     onSkip: () -> Unit
 ) {
     var isRunning by remember { mutableStateOf(true) }
+    var detectedOtp by remember { mutableStateOf<String?>(null) }
+    val clipboardManager = LocalClipboardManager.current
+    val terminalState = rememberTabbedTerminalState(autoDispose = false)
+
+    // Poll for OTP pattern every 500ms while running
+    // GitHub OTP format: XXXX-XXXX (e.g., A1B2-C3D4)
+    LaunchedEffect(isRunning) {
+        while (isRunning && detectedOtp == null) {
+            delay(500)
+            // Search for pattern like "A1B2-C3D4" (alphanumeric with dash)
+            val matches = terminalState.findPatternRegex("[A-Z0-9]{4}-[A-Z0-9]{4}")
+            if (matches.isNotEmpty()) {
+                detectedOtp = matches.first().text
+            }
+        }
+    }
+
+    // Cleanup terminal state when leaving composition
+    DisposableEffect(Unit) {
+        onDispose {
+            terminalState.dispose()
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize()
@@ -1177,7 +1207,125 @@ fun GhAuthStep(
             fontSize = 14.sp,
             color = TextSecondary
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Flowchart showing the 3-step process
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Step 1: Code Appears
+            Card(
+                backgroundColor = Color(0xFF2D4F2D),
+                border = BorderStroke(1.dp, Color(0xFF4CAF50)),
+                modifier = Modifier.weight(1f)
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("1. CODE APPEARS", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFF4CAF50))
+                    Text("XXXX-XXXX", fontSize = 10.sp, color = TextMuted)
+                }
+            }
+
+            // Arrow
+            Text(" \u2192 ", fontSize = 16.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+
+            // Step 2: Copy Code (highlighted)
+            Card(
+                backgroundColor = Color(0xFF4F4F2D),
+                border = BorderStroke(2.dp, Color(0xFFFFD700)),
+                modifier = Modifier.weight(1f)
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("2. COPY CODE", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFFFFD700))
+                    Text("Select & Copy", fontSize = 10.sp, color = TextMuted)
+                }
+            }
+
+            // Arrow
+            Text(" \u2192 ", fontSize = 16.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+
+            // Step 3: Paste in Browser
+            Card(
+                backgroundColor = Color(0xFF2D3D4F),
+                border = BorderStroke(1.dp, Color(0xFF2196F3)),
+                modifier = Modifier.weight(1f)
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("3. PASTE", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFF2196F3))
+                    Text("In Browser", fontSize = 10.sp, color = TextMuted)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Bold instruction (hidden when OTP detected)
+        AnimatedVisibility(
+            visible = detectedOtp == null,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Text(
+                text = "IMPORTANT: Copy the one-time code when it appears below!",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = Color(0xFFFFD700),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        // OTP Copy Button (appears when code is detected)
+        AnimatedVisibility(
+            visible = detectedOtp != null,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Card(
+                backgroundColor = Color(0xFF2D4F2D),
+                border = BorderStroke(2.dp, Color(0xFF4CAF50)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "Code: ${detectedOtp ?: ""}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = Color(0xFF4CAF50)
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Button(
+                        onClick = {
+                            detectedOtp?.let { otp ->
+                                clipboardManager.setText(AnnotatedString(otp))
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            backgroundColor = Color(0xFF4CAF50),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text("Copy Code")
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         val ghAuthCommand = "gh auth login"
 
@@ -1189,6 +1337,7 @@ fun GhAuthStep(
                 .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
         ) {
             TabbedTerminal(
+                state = terminalState,
                 initialCommand = ghAuthCommand,
                 onInitialCommandComplete = { success, exitCode ->
                     isRunning = false
@@ -1198,7 +1347,7 @@ fun GhAuthStep(
                     // If auth failed/cancelled, user can still click buttons
                 },
                 onExit = { /* Terminal closed - do nothing */ },
-                onContextMenuOpenAsync = { },  // Skip async detection to prevent focus issues in dialog
+                onContextMenuOpen = { },  // Use SYNC callback to skip ALL async operations
                 settingsOverride = TerminalSettingsOverride(
                     fontSize = 12f
                 ),
