@@ -1,0 +1,36 @@
+name: Sync Fork with Upstream
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Every Sunday at midnight UTC
+  workflow_dispatch:      # Allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/kshivang/BossTerm.git
+
+      - name: Fetch upstream
+        run: git fetch upstream main
+
+      - name: Merge upstream changes
+        run: git merge upstream/main --no-edit
+
+      - name: Create PR if changes exist
+        uses: peter-evans/create-pull-request@v7
+        with:
+          title: "Sync: Upstream changes"
+          body: "Automated sync with upstream BossTerm repository"
+          branch: sync/upstream
+          delete-branch: true
