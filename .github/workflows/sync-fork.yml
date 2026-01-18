@@ -22,10 +22,10 @@ jobs:
         run: git remote add upstream https://github.com/kshivang/BossTerm.git
 
       - name: Fetch upstream
-        run: git fetch upstream main
+        run: git fetch upstream master
 
       - name: Merge upstream changes
-        run: git merge upstream/main --no-edit
+        run: git merge upstream/master --no-edit
 
       - name: Create PR if changes exist
         uses: peter-evans/create-pull-request@v7
