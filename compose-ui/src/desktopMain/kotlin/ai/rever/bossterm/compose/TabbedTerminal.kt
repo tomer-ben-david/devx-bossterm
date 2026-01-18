@@ -146,6 +146,7 @@ fun TabbedTerminal(
     isWindowFocused: () -> Boolean = { true },
     initialCommand: String? = null,
     onInitialCommandComplete: ((success: Boolean, exitCode: Int) -> Unit)? = null,
+    onOutput: ((String) -> Unit)? = null,
     workingDirectory: String? = null,
     onLinkClick: ((HyperlinkInfo) -> Boolean)? = null,
     contextMenuItems: List<ContextMenuElement> = emptyList(),
@@ -200,7 +201,8 @@ fun TabbedTerminal(
             settings = settings,
             onLastTabClosed = onExit,
             isWindowFocused = isWindowFocused,
-            onTabClose = onTabClose
+            onTabClose = onTabClose,
+            onOutput = onOutput
         )
     }
 
@@ -210,7 +212,8 @@ fun TabbedTerminal(
             settings = settings,
             onLastTabClosed = onExit,
             isWindowFocused = isWindowFocused,
-            onTabClose = onTabClose
+            onTabClose = onTabClose,
+            onOutput = onOutput
         )
     }
 

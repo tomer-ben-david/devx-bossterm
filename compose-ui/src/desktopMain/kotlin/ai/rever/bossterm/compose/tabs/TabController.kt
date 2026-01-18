@@ -52,7 +52,8 @@ class TabController(
     private val settings: TerminalSettings,
     private val onLastTabClosed: () -> Unit,
     private val isWindowFocused: () -> Boolean = { true },
-    private val onTabClose: ((tabId: String) -> Unit)? = null
+    private val onTabClose: ((tabId: String) -> Unit)? = null,
+    private val onOutput: ((String) -> Unit)? = null
 ) {
     /**
      * List of all terminal tabs (observable, triggers recomposition).
@@ -411,10 +412,7 @@ class TabController(
             collector.setTab(tab)
 
             // Hook into data stream for PTY output capture
-            dataStream.debugCallback = { data ->
-                collector.recordChunk(data, ChunkSource.PTY_OUTPUT)
-            }
-
+            attachOutputCallback(dataStream, collector)
             // Hook into display for console log capture (errors, warnings)
             display.debugLogCallback = { message ->
                 collector.recordChunk(message, ChunkSource.CONSOLE_LOG)
@@ -643,9 +641,7 @@ class TabController(
         // Complete debug collector initialization
         debugCollector?.let { collector ->
             collector.setTab(session)
-            dataStream.debugCallback = { data ->
-                collector.recordChunk(data, ChunkSource.PTY_OUTPUT)
-            }
+            attachOutputCallback(dataStream, collector)
             // Hook into display for console log capture (errors, warnings)
             display.debugLogCallback = { message ->
                 collector.recordChunk(message, ChunkSource.CONSOLE_LOG)
@@ -823,9 +819,7 @@ class TabController(
 
         debugCollector?.let { collector ->
             collector.setTab(tab)
-            dataStream.debugCallback = { data ->
-                collector.recordChunk(data, ChunkSource.PTY_OUTPUT)
-            }
+            attachOutputCallback(dataStream, collector)
             // Hook into display for console log capture (errors, warnings)
             display.debugLogCallback = { message ->
                 collector.recordChunk(message, ChunkSource.CONSOLE_LOG)
@@ -1614,6 +1608,19 @@ class TabController(
             key != "TERM_SESSION_ID" &&
             key != "PWD" &&
             key != "OLDPWD"
+        }
+    }
+
+    private fun attachOutputCallback(
+        dataStream: BlockingTerminalDataStream,
+        collector: ai.rever.bossterm.compose.debug.DebugDataCollector?
+    ) {
+        if (collector == null && onOutput == null) {
+            return
+        }
+        dataStream.debugCallback = { data ->
+            collector?.recordChunk(data, ChunkSource.PTY_OUTPUT)
+            onOutput?.invoke(data)
         }
     }
 
