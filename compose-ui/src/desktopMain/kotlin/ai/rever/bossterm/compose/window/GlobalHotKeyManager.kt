@@ -279,7 +279,7 @@ object GlobalHotKeyManager {
                     // Ignore
                 }
             }
-            winThreadId = 0  // Reset after thread actually stops
+            // Note: winThreadId is cleared in stopWindows() after posting WM_QUIT
             registeredWindows.clear()
             _registrationStatus.value = HotKeyRegistrationStatus.INACTIVE
         }
@@ -295,14 +295,15 @@ object GlobalHotKeyManager {
 
     private fun stopWindows() {
         val api = Win32HotKeyApi.INSTANCE ?: return
-        if (winThreadId != 0) {
+        val threadId = winThreadId
+        if (threadId != 0) {
+            winThreadId = 0  // Reset immediately to prevent duplicate WM_QUIT on re-entry
             try {
-                api.PostThreadMessage(winThreadId, Win32HotKeyApi.WM_QUIT, WPARAM(0), LPARAM(0))
+                api.PostThreadMessage(threadId, Win32HotKeyApi.WM_QUIT, WPARAM(0), LPARAM(0))
             } catch (e: Exception) {
                 // Ignore
             }
         }
-        // Note: winThreadId is reset to 0 in the handler's finally block after thread actually stops
     }
 
     // ===== macOS Implementation =====
@@ -558,12 +559,14 @@ object GlobalHotKeyManager {
             )
 
             // Register hotkeys for windows 1-9
+            val failedWindows = mutableListOf<Int>()
             for (windowNum in 1..9) {
                 val keysym = LinuxHotKeyApi.XK_0 + windowNum
                 val keycode = api.XKeysymToKeycode(display, NativeLong(keysym.toLong()))
 
                 if (keycode == 0) {
                     println("GlobalHotKeyManager: Failed to get keycode for window $windowNum")
+                    failedWindows.add(windowNum)
                     continue
                 }
 
@@ -588,6 +591,7 @@ object GlobalHotKeyManager {
                 } catch (e: Exception) {
                     println("GlobalHotKeyManager: Failed to register hotkey for window $windowNum: ${e.message}")
                     println("  This may indicate a conflict with an existing system hotkey")
+                    failedWindows.add(windowNum)
                 }
             }
 
@@ -603,8 +607,15 @@ object GlobalHotKeyManager {
             api.XSelectInput(display, rootWindow, NativeLong(LinuxHotKeyApi.KeyPressMask))
             api.XFlush(display)
 
-            println("GlobalHotKeyManager: Registered Linux hotkeys for windows 1-9")
-            _registrationStatus.value = HotKeyRegistrationStatus.REGISTERED
+            if (failedWindows.isEmpty()) {
+                println("GlobalHotKeyManager: Registered Linux hotkeys for windows 1-9")
+                _registrationStatus.value = HotKeyRegistrationStatus.REGISTERED
+            } else {
+                println("GlobalHotKeyManager: Registered Linux hotkeys for windows ${registeredWindows.sorted()}")
+                println("  Failed to register: ${failedWindows.sorted()} (likely conflicts with system hotkeys)")
+                // Still mark as REGISTERED since some work, but user is informed about failures
+                _registrationStatus.value = HotKeyRegistrationStatus.REGISTERED
+            }
 
             // Signal that initialization is complete
             initializationLatch?.countDown()
@@ -612,6 +623,10 @@ object GlobalHotKeyManager {
             // Event loop - uses a hybrid polling/event-driven approach
             // XNextEvent() blocks indefinitely, so we use XPending() + short sleep
             // to allow periodic checking of isRunning flag
+            //
+            // Performance tradeoff: 10ms polling adds ~0.1% CPU usage when idle.
+            // Alternative: XConnectionNumber() + select() for true event-driven waiting,
+            // but requires additional JNA bindings for POSIX select().
             val event = XEvent()
             while (isRunning && !Thread.currentThread().isInterrupted) {
                 if (api.XPending(display) > 0) {

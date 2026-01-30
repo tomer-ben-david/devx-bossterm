@@ -240,13 +240,37 @@ interface LinuxHotKeyApi : Library {
 
 /**
  * X11 XEvent union structure (simplified for key events).
+ *
+ * XEvent is a union that can hold various event types. The size varies by architecture:
+ * - x86_64: 192 bytes
+ * - x86 (32-bit): 96 bytes
+ * - ARM64: 192 bytes
+ *
+ * We calculate padding dynamically based on pointer size to ensure correct alignment.
  */
 @Structure.FieldOrder("type", "pad")
 open class XEvent : Structure() {
     @JvmField var type: Int = 0
-    @JvmField var pad: ByteArray = ByteArray(188)  // Pad to full XEvent size
+    @JvmField var pad: ByteArray = ByteArray(calculatePaddingSize())
 
     class ByReference : XEvent(), Structure.ByReference
+
+    companion object {
+        /**
+         * Calculate XEvent padding size based on architecture.
+         * XEvent size = 192 bytes on 64-bit, 96 bytes on 32-bit.
+         */
+        private fun calculatePaddingSize(): Int {
+            // Type field is 4 bytes, rest is padding
+            // On 64-bit (POINTER_SIZE=8): 192 - 4 = 188 bytes
+            // On 32-bit (POINTER_SIZE=4): 96 - 4 = 92 bytes
+            return if (Native.POINTER_SIZE == 8) {
+                188  // 64-bit
+            } else {
+                92   // 32-bit
+            }
+        }
+    }
 
     /**
      * Extract keycode from this XEvent if it's a key event.

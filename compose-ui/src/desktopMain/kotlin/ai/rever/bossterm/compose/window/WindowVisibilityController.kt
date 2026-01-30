@@ -133,6 +133,11 @@ object WindowVisibilityController {
 
     /**
      * Get the native HWND handle for an AWT window.
+     *
+     * Requires JVM arg on Java 16+: --add-opens java.desktop/java.awt=ALL-UNNAMED
+     *
+     * Without this flag, reflection access to Component.peer will fail on modern JVMs
+     * and the hotkey toggle functionality will fall back to standard show/hide.
      */
     private fun getWindowHandle(window: Window): HWND? {
         return try {
