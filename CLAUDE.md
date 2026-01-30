@@ -15,6 +15,21 @@
 pkill -9 -f "gradle"                             # Kill stuck gradle
 ```
 
+## JVM Requirements (Java 16+)
+
+For full functionality on Java 16+, add these JVM arguments:
+
+```
+--add-opens java.desktop/java.awt=ALL-UNNAMED        # Windows: HWND access for global hotkeys
+--add-opens java.desktop/sun.awt.X11=ALL-UNNAMED     # Linux: WM_CLASS for desktop integration
+```
+
+Without these flags:
+- **Windows**: Global hotkey window toggle falls back to standard show/hide
+- **Linux**: Desktop integration (taskbar grouping) may not work correctly
+
+Add to IDE run configurations or gradle.properties for development.
+
 ## Git Workflow
 
 ```bash
