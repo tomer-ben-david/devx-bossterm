@@ -159,6 +159,7 @@ object WindowVisibilityController {
             }
         } catch (e: Exception) {
             // JNA or reflection failed - return null to use fallback
+            println("WindowVisibilityController: Failed to get HWND: ${e.javaClass.simpleName} - ${e.message}")
             null
         }
     }

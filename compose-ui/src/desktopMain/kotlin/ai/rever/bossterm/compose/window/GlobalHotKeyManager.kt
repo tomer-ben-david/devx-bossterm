@@ -39,7 +39,7 @@ object GlobalHotKeyManager {
     private const val HOTKEY_SIGNATURE = 0x424F5353  // 'BOSS'
 
     private var handlerThread: Thread? = null
-    private var isRunning = false
+    @Volatile private var isRunning = false
     private var baseConfig: HotKeyConfig? = null
     private var onWindowHotKeyPressed: ((Int) -> Unit)? = null
     private var initializationLatch: CountDownLatch? = null
@@ -114,7 +114,11 @@ object GlobalHotKeyManager {
         if (windowNumber in registeredWindows) return
 
         // Wait for platform-specific initialization to complete
-        initializationLatch?.await(5, TimeUnit.SECONDS)
+        val initialized = initializationLatch?.await(5, TimeUnit.SECONDS) ?: false
+        if (!initialized) {
+            println("GlobalHotKeyManager: Initialization timeout, cannot register window $windowNumber")
+            return
+        }
 
         val config = baseConfig ?: return
 
@@ -180,6 +184,9 @@ object GlobalHotKeyManager {
         baseConfig = null
         onWindowHotKeyPressed = null
         initializationLatch = null
+        macEventHandler = null
+        macEventHandlerRef = null
+        macRunLoopMode = null
         registeredWindows.clear()
         _registrationStatus.value = HotKeyRegistrationStatus.INACTIVE
 
@@ -210,6 +217,12 @@ object GlobalHotKeyManager {
         }
 
         winThreadId = api.GetCurrentThreadId()
+        if (winThreadId == 0) {
+            println("GlobalHotKeyManager: Failed to get thread ID")
+            _registrationStatus.value = HotKeyRegistrationStatus.FAILED
+            initializationLatch?.countDown()
+            return
+        }
 
         // Register hotkeys for windows 1-9
         val modifiers = config.toWin32Modifiers()
@@ -606,15 +619,15 @@ object GlobalHotKeyManager {
                     api.XNextEvent(display, event)
                     if (event.type == LinuxHotKeyApi.KeyPress) {
                         // Extract the actual keycode from the XEvent
-                        // XKeyEvent.keycode is at byte offset 84 in the XEvent structure (on 64-bit systems)
-                        // This is fragile but works for standard X11 on Linux x86_64
-                        val eventKeycode = event.pointer.getInt(84)
-
-                        // Find the matching window number by comparing keycodes
-                        for ((windowNum, keycode) in linuxKeycodes) {
-                            if (eventKeycode == keycode) {
-                                invokeCallback(windowNum)
-                                break
+                        // This properly handles the X11 union structure without hard-coded offsets
+                        val eventKeycode = event.getKeycode()
+                        if (eventKeycode != null) {
+                            // Find the matching window number by comparing keycodes
+                            for ((windowNum, keycode) in linuxKeycodes) {
+                                if (eventKeycode == keycode) {
+                                    invokeCallback(windowNum)
+                                    break
+                                }
                             }
                         }
                     }

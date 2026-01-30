@@ -59,13 +59,16 @@ fun main() {
     // Set WM_CLASS for Linux desktop integration (must be before any AWT init)
     setLinuxWMClass()
 
-    // Start global hotkey manager (Windows only)
-    startGlobalHotKeyManager()
-
     application {
         // Create initial window if none exist
         if (WindowManager.windows.isEmpty()) {
             WindowManager.createWindow()
+        }
+
+        // Start global hotkey manager after initial window creation
+        // Use LaunchedEffect to run only once
+        LaunchedEffect(Unit) {
+            startGlobalHotKeyManager()
         }
 
         // Detect platform
@@ -834,7 +837,7 @@ private fun configureGpuRendering() {
 }
 
 /**
- * Start the global hotkey manager.
+ * Start the global hotkey manager (Windows, macOS, Linux).
  * Allows summoning specific BossTerm windows from anywhere with system-wide hotkeys.
  * Each window gets a unique hotkey: Modifiers+1, Modifiers+2, etc.
  */
@@ -860,6 +863,14 @@ private fun startGlobalHotKeyManager() {
         return
     }
 
+    // Set up window lifecycle callbacks for hotkey registration
+    WindowManager.onWindowCreated = { window ->
+        GlobalHotKeyManager.registerWindow(window.windowNumber)
+    }
+    WindowManager.onWindowClosed = { window ->
+        GlobalHotKeyManager.unregisterWindow(window.windowNumber)
+    }
+
     // Start the manager with window-specific callback
     GlobalHotKeyManager.start(config) { windowNumber ->
         // Find the window with this number
@@ -878,6 +889,11 @@ private fun startGlobalHotKeyManager() {
                 }
             }
         }
+    }
+
+    // Register existing windows (in case any were created before hotkey manager started)
+    WindowManager.windows.forEach { window ->
+        GlobalHotKeyManager.registerWindow(window.windowNumber)
     }
 
     // Register shutdown hook to clean up

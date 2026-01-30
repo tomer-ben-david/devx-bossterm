@@ -249,17 +249,21 @@ open class XEvent : Structure() {
     class ByReference : XEvent(), Structure.ByReference
 
     /**
-     * Get as XKeyEvent if this is a key event.
+     * Extract keycode from this XEvent if it's a key event.
+     * Returns null if this is not a key press/release event.
+     *
+     * This properly overlays the XKeyEvent structure on the XEvent union
+     * without relying on architecture-specific byte offsets.
      */
-    fun asKeyEvent(): XKeyEvent? {
+    fun getKeycode(): Int? {
         if (type != LinuxHotKeyApi.KeyPress && type != LinuxHotKeyApi.KeyRelease) {
             return null
         }
-        val keyEvent = XKeyEvent()
-        keyEvent.type = type
-        // Copy relevant bytes from pad to keyEvent fields
-        // The structure layout depends on the platform
-        return keyEvent
+        // Create XKeyEvent structure at the same memory location as this XEvent
+        // XEvent is a union, so XKeyEvent overlays it starting from byte 0
+        val keyEvent = Structure.newInstance(XKeyEvent::class.java, pointer) as XKeyEvent
+        keyEvent.read()
+        return keyEvent.keycode
     }
 }
 
