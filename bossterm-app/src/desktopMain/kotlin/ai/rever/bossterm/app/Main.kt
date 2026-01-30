@@ -69,7 +69,7 @@ fun main() {
         }
 
         // Detect platform
-        val isMacOS = System.getProperty("os.name").lowercase().contains("mac")
+        val isMacOS = ShellCustomizationUtils.isMacOS()
 
         // Render all windows
         for (window in WindowManager.windows) {
@@ -741,7 +741,7 @@ fun main() {
  * Requires JVM arg: --add-opens java.desktop/sun.awt.X11=ALL-UNNAMED
  */
 private fun setLinuxWMClass() {
-    if (!System.getProperty("os.name").lowercase().contains("linux")) return
+    if (!ShellCustomizationUtils.isLinux()) return
 
     try {
         // Get toolkit instance (creates it if needed)
@@ -767,9 +767,8 @@ private fun setLinuxWMClass() {
  * - GPU resource cache size
  */
 private fun configureGpuRendering() {
-    val osName = System.getProperty("os.name").lowercase()
-    val isMacOS = osName.contains("mac")
-    val isWindows = osName.contains("windows")
+    val isMacOS = ShellCustomizationUtils.isMacOS()
+    val isWindows = ShellCustomizationUtils.isWindows()
 
     // Load settings using SettingsLoader (handles JSON parsing and defaults)
     val settings = try {

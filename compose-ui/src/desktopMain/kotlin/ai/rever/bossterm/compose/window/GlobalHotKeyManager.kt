@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.awt.event.KeyEvent
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import javax.swing.SwingUtilities
 
 /**
@@ -40,6 +42,7 @@ object GlobalHotKeyManager {
     private var isRunning = false
     private var baseConfig: HotKeyConfig? = null
     private var onWindowHotKeyPressed: ((Int) -> Unit)? = null
+    private var initializationLatch: CountDownLatch? = null
 
     // Platform-specific state
     private var winThreadId: Int = 0
@@ -78,6 +81,7 @@ object GlobalHotKeyManager {
 
         this.baseConfig = config
         this.onWindowHotKeyPressed = onWindowHotKeyPressed
+        this.initializationLatch = CountDownLatch(1)
 
         // Start platform-specific handler
         isRunning = true
@@ -108,6 +112,9 @@ object GlobalHotKeyManager {
         if (windowNumber < 1 || windowNumber > 9) return
         if (!isRunning) return
         if (windowNumber in registeredWindows) return
+
+        // Wait for platform-specific initialization to complete
+        initializationLatch?.await(5, TimeUnit.SECONDS)
 
         val config = baseConfig ?: return
 
@@ -156,18 +163,23 @@ object GlobalHotKeyManager {
 
         handlerThread?.let { thread ->
             try {
-                thread.join(1000)
+                // Wait up to 2 seconds for graceful shutdown
+                thread.join(2000)
                 if (thread.isAlive) {
+                    // Interrupt if still running
                     thread.interrupt()
+                    // Give it another second to cleanup after interrupt
+                    thread.join(1000)
                 }
             } catch (e: InterruptedException) {
-                // Ignore
+                Thread.currentThread().interrupt() // Restore interrupt status
             }
         }
 
         handlerThread = null
         baseConfig = null
         onWindowHotKeyPressed = null
+        initializationLatch = null
         registeredWindows.clear()
         _registrationStatus.value = HotKeyRegistrationStatus.INACTIVE
 
@@ -193,6 +205,7 @@ object GlobalHotKeyManager {
         if (api == null) {
             println("GlobalHotKeyManager: Win32 API not available")
             _registrationStatus.value = HotKeyRegistrationStatus.UNAVAILABLE
+            initializationLatch?.countDown()
             return
         }
 
@@ -218,15 +231,19 @@ object GlobalHotKeyManager {
         if (!anyRegistered) {
             println("GlobalHotKeyManager: Failed to register any Windows hotkeys")
             _registrationStatus.value = HotKeyRegistrationStatus.FAILED
+            initializationLatch?.countDown()
             return
         }
 
         println("GlobalHotKeyManager: Registered Windows hotkeys for windows 1-9")
         _registrationStatus.value = HotKeyRegistrationStatus.REGISTERED
 
+        // Signal that initialization is complete
+        initializationLatch?.countDown()
+
         val msg = MSG()
         try {
-            while (isRunning) {
+            while (isRunning && !Thread.currentThread().isInterrupted) {
                 val result = api.GetMessage(msg, null, 0, 0)
                 if (result == 0 || result == -1) break
 
@@ -239,6 +256,7 @@ object GlobalHotKeyManager {
             }
         } catch (e: Exception) {
             println("GlobalHotKeyManager: Windows message pump error: ${e.message}")
+            _registrationStatus.value = HotKeyRegistrationStatus.FAILED
         } finally {
             // Unregister all hotkeys
             for (windowNum in 1..9) {
@@ -248,6 +266,7 @@ object GlobalHotKeyManager {
                     // Ignore
                 }
             }
+            winThreadId = 0  // Reset after thread actually stops
             registeredWindows.clear()
             _registrationStatus.value = HotKeyRegistrationStatus.INACTIVE
         }
@@ -270,7 +289,7 @@ object GlobalHotKeyManager {
                 // Ignore
             }
         }
-        winThreadId = 0
+        // Note: winThreadId is reset to 0 in the handler's finally block after thread actually stops
     }
 
     // ===== macOS Implementation =====
@@ -282,12 +301,14 @@ object GlobalHotKeyManager {
         if (carbonApi == null) {
             println("GlobalHotKeyManager: Carbon API not available")
             _registrationStatus.value = HotKeyRegistrationStatus.UNAVAILABLE
+            initializationLatch?.countDown()
             return
         }
 
         if (cfApi == null) {
             println("GlobalHotKeyManager: CoreFoundation API not available")
             _registrationStatus.value = HotKeyRegistrationStatus.UNAVAILABLE
+            initializationLatch?.countDown()
             return
         }
 
@@ -298,6 +319,7 @@ object GlobalHotKeyManager {
             if (target == null) {
                 println("GlobalHotKeyManager: Failed to get event dispatcher target")
                 _registrationStatus.value = HotKeyRegistrationStatus.FAILED
+                initializationLatch?.countDown()
                 return
             }
 
@@ -354,6 +376,7 @@ object GlobalHotKeyManager {
             if (installResult != MacOSHotKeyApi.noErr) {
                 println("GlobalHotKeyManager: Failed to install event handler: $installResult")
                 _registrationStatus.value = HotKeyRegistrationStatus.FAILED
+                initializationLatch?.countDown()
                 return
             }
             macEventHandlerRef = handlerRef.value
@@ -389,11 +412,15 @@ object GlobalHotKeyManager {
             if (!anyRegistered) {
                 println("GlobalHotKeyManager: Failed to register any macOS hotkeys")
                 _registrationStatus.value = HotKeyRegistrationStatus.FAILED
+                initializationLatch?.countDown()
                 return
             }
 
             println("GlobalHotKeyManager: Registered macOS hotkeys for windows 1-9")
             _registrationStatus.value = HotKeyRegistrationStatus.REGISTERED
+
+            // Signal that initialization is complete
+            initializationLatch?.countDown()
 
             // Create the run loop mode string (kCFRunLoopDefaultMode)
             // Use encoding 0x08000100 for kCFStringEncodingUTF8
@@ -401,7 +428,7 @@ object GlobalHotKeyManager {
 
             // Process events using CFRunLoopRunInMode instead of RunApplicationEventLoop
             // This allows us to periodically check if we should stop
-            while (isRunning) {
+            while (isRunning && !Thread.currentThread().isInterrupted) {
                 // Run the run loop for a short time (100ms)
                 // This will process any pending events including hotkey events
                 cfApi.CFRunLoopRunInMode(macRunLoopMode, 0.1, false)
@@ -491,6 +518,7 @@ object GlobalHotKeyManager {
         if (api == null) {
             println("GlobalHotKeyManager: X11 API not available")
             _registrationStatus.value = HotKeyRegistrationStatus.UNAVAILABLE
+            initializationLatch?.countDown()
             return
         }
 
@@ -499,6 +527,7 @@ object GlobalHotKeyManager {
             if (display == null) {
                 println("GlobalHotKeyManager: Failed to open X11 display")
                 _registrationStatus.value = HotKeyRegistrationStatus.FAILED
+                initializationLatch?.countDown()
                 return
             }
             linuxDisplay = display
@@ -519,26 +548,42 @@ object GlobalHotKeyManager {
             for (windowNum in 1..9) {
                 val keysym = LinuxHotKeyApi.XK_0 + windowNum
                 val keycode = api.XKeysymToKeycode(display, NativeLong(keysym.toLong()))
+
+                if (keycode == 0) {
+                    println("GlobalHotKeyManager: Failed to get keycode for window $windowNum")
+                    continue
+                }
+
                 linuxKeycodes[windowNum] = keycode
 
-                for (mods in modifierVariants) {
-                    api.XGrabKey(
-                        display,
-                        keycode,
-                        mods,
-                        rootWindow,
-                        1,
-                        LinuxHotKeyApi.GrabModeAsync,
-                        LinuxHotKeyApi.GrabModeAsync
-                    )
+                try {
+                    for (mods in modifierVariants) {
+                        api.XGrabKey(
+                            display,
+                            keycode,
+                            mods,
+                            rootWindow,
+                            1,
+                            LinuxHotKeyApi.GrabModeAsync,
+                            LinuxHotKeyApi.GrabModeAsync
+                        )
+                    }
+                    // Sync to flush any errors
+                    api.XSync(display, 0)
+                    registeredWindows.add(windowNum)
+                    anyRegistered = true
+                } catch (e: Exception) {
+                    println("GlobalHotKeyManager: Failed to register hotkey for window $windowNum: ${e.message}")
+                    println("  This may indicate a conflict with an existing system hotkey")
                 }
-                registeredWindows.add(windowNum)
-                anyRegistered = true
             }
 
             if (!anyRegistered) {
                 println("GlobalHotKeyManager: Failed to register any Linux hotkeys")
+                println("  This usually indicates conflicts with existing system hotkeys")
+                println("  Try using different modifier keys in BossTerm settings")
                 _registrationStatus.value = HotKeyRegistrationStatus.FAILED
+                initializationLatch?.countDown()
                 return
             }
 
@@ -548,23 +593,40 @@ object GlobalHotKeyManager {
             println("GlobalHotKeyManager: Registered Linux hotkeys for windows 1-9")
             _registrationStatus.value = HotKeyRegistrationStatus.REGISTERED
 
-            // Event loop
+            // Signal that initialization is complete
+            initializationLatch?.countDown()
+
+            // Event loop - uses a hybrid polling/event-driven approach
+            // XNextEvent() blocks indefinitely, so we use XPending() + short sleep
+            // to allow periodic checking of isRunning flag
             val event = XEvent()
-            while (isRunning) {
+            while (isRunning && !Thread.currentThread().isInterrupted) {
                 if (api.XPending(display) > 0) {
+                    // Events available - process immediately
                     api.XNextEvent(display, event)
                     if (event.type == LinuxHotKeyApi.KeyPress) {
-                        // Determine which window number was pressed
-                        // For simplicity, we check all keycodes
+                        // Extract the actual keycode from the XEvent
+                        // XKeyEvent.keycode is at byte offset 84 in the XEvent structure (on 64-bit systems)
+                        // This is fragile but works for standard X11 on Linux x86_64
+                        val eventKeycode = event.pointer.getInt(84)
+
+                        // Find the matching window number by comparing keycodes
                         for ((windowNum, keycode) in linuxKeycodes) {
-                            // The event contains the keycode in the structure
-                            // This is a simplified check
-                            invokeCallback(windowNum)
-                            break
+                            if (eventKeycode == keycode) {
+                                invokeCallback(windowNum)
+                                break
+                            }
                         }
                     }
                 } else {
-                    Thread.sleep(50)
+                    // No events - sleep briefly to reduce CPU usage while remaining responsive
+                    // 10ms sleep provides ~5ms average latency for hotkey response
+                    try {
+                        Thread.sleep(10)
+                    } catch (e: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        break
+                    }
                 }
             }
 
