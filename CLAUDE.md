@@ -15,6 +15,21 @@
 pkill -9 -f "gradle"                             # Kill stuck gradle
 ```
 
+## JVM Requirements (Java 16+)
+
+For full functionality on Java 16+, add these JVM arguments:
+
+```
+--add-opens java.desktop/java.awt=ALL-UNNAMED        # Windows: HWND access for global hotkeys
+--add-opens java.desktop/sun.awt.X11=ALL-UNNAMED     # Linux: WM_CLASS for desktop integration
+```
+
+Without these flags:
+- **Windows**: Global hotkey window toggle falls back to standard show/hide
+- **Linux**: Desktop integration (taskbar grouping) may not work correctly
+
+Add to IDE run configurations or gradle.properties for development.
+
 ## Git Workflow
 
 ```bash
@@ -71,7 +86,7 @@ Located in: `compose-ui/src/desktopMain/kotlin/ai/rever/bossterm/compose/shell/S
 
 **AI/VCS**
 - `compose-ui/src/desktopMain/kotlin/ai/rever/bossterm/compose/ai/AIAssistantDefinition.kt`
-- `compose-ui/src/desktopMain/kotlin/ai/rever/bossterm/compose/ai/AIAssistantLauncher.kt`
+- `compose-ui/src/desktopMain/kotlin/ai/rever/bossterm/compose/ai/ToolCommandProvider.kt`
 
 **Settings**
 - `compose-ui/src/desktopMain/kotlin/ai/rever/bossterm/compose/settings/TerminalSettings.kt`
@@ -97,7 +112,8 @@ state.write("cmd\n", tabId = "id")   // Target tab by ID
 
 ## Development Guidelines
 
-- Do NOT run app or capture screenshots - user handles testing
+- **NEVER run the app** - user handles all testing. Maximum allowed: `./gradlew build` to check for compile errors
+- Do NOT capture screenshots
 - Use `remember {}` for expensive computations
 - Task tool for searches, specialized tools over bash
 - No backwards-compatibility hacks
